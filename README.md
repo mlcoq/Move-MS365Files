@@ -3,7 +3,7 @@
 GUI-based PowerShell tool to copy or move files between SharePoint Online and OneDrive for Business.
 
 The script asks for:
-- Tenant name (without `.sharepoint.com`)
+- Tenant name
 - Source type: SharePoint or OneDrive
 - Destination type: SharePoint or OneDrive
 - Library name
@@ -41,12 +41,12 @@ Install-Module PnP.PowerShell -Scope CurrentUser
 ## Input notes
 
 - For SharePoint:
-	- `Site pad` is relative to tenant root, e.g. `sites/Finance`.
-	- `Library` is typically `Shared Documents`.
+	- `Site pad` is relative to tenant root.
+	- `Library` should be the target document library name.
 - For OneDrive:
 	- Enter the OneDrive owner email.
 	- Script converts email to the correct `/personal/...` URL segment.
-	- `Library` is typically `Documents`.
+	- `Library` should be the target document library name.
 - Empty subfolder means library root.
 
 ## Supported combinations

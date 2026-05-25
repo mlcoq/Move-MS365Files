@@ -526,7 +526,7 @@ $form.Font = $font
 $lblTenant = New-Object System.Windows.Forms.Label
 $lblTenant.Location = New-Object System.Drawing.Point(20, 20)
 $lblTenant.Size = New-Object System.Drawing.Size(220, 25)
-$lblTenant.Text = "Tenant (zonder .sharepoint.com):"
+$lblTenant.Text = "Tenant:"
 $form.Controls.Add($lblTenant)
 
 $txtTenant = New-Object System.Windows.Forms.TextBox
@@ -563,7 +563,7 @@ $grpSource.Controls.Add($srcLblSite)
 $srcSitePath = New-Object System.Windows.Forms.TextBox
 $srcSitePath.Location = New-Object System.Drawing.Point(150, 63)
 $srcSitePath.Size = New-Object System.Drawing.Size(260, 25)
-$srcSitePath.Text = "sites/SourceSite"
+$srcSitePath.Text = ""
 $grpSource.Controls.Add($srcSitePath)
 
 $srcLblEmail = New-Object System.Windows.Forms.Label
@@ -637,7 +637,7 @@ $grpDest.Controls.Add($dstLblSite)
 $dstSitePath = New-Object System.Windows.Forms.TextBox
 $dstSitePath.Location = New-Object System.Drawing.Point(150, 63)
 $dstSitePath.Size = New-Object System.Drawing.Size(260, 25)
-$dstSitePath.Text = "sites/DestinationSite"
+$dstSitePath.Text = ""
 $grpDest.Controls.Add($dstSitePath)
 
 $dstLblEmail = New-Object System.Windows.Forms.Label
