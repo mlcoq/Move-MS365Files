@@ -22,6 +22,33 @@ $script:LogFile = "$PSScriptRoot\MS365Mover_Log_$(Get-Date -Format 'yyyyMMdd_HHm
 $script:LogTextBox = $null
 $script:LastOverview = $null
 
+function Ensure-RequiredPowerShell {
+    $required = [version]"7.4.0"
+    if ($PSVersionTable.PSVersion -ge $required) {
+        return
+    }
+
+    $pwshCmd = Get-Command pwsh -ErrorAction SilentlyContinue
+    if ($null -ne $pwshCmd) {
+        [System.Windows.Forms.MessageBox]::Show(
+            "This script needs PowerShell 7.4+ for PnP.PowerShell. It will now restart in PowerShell 7.",
+            "Restarting in PowerShell 7",
+            "OK",
+            "Information"
+        ) | Out-Null
+
+        Start-Process -FilePath $pwshCmd.Source -ArgumentList @(
+            "-NoProfile",
+            "-ExecutionPolicy", "Bypass",
+            "-File", "`"$PSCommandPath`""
+        ) -WorkingDirectory $PSScriptRoot
+
+        exit
+    }
+
+    throw "PowerShell 7.4+ is required for PnP.PowerShell, but 'pwsh' was not found. Install PowerShell 7 and run the script again."
+}
+
 function Write-Log {
     param(
         [string]$Message,
@@ -527,7 +554,36 @@ function Update-TenantExamples {
     $ExampleLabel.Text = "Examples: SharePoint URL https://$tenant.sharepoint.com/sites/Finance | OneDrive URL https://$tenant-my.sharepoint.com/personal/john_doe_contoso_com"
 }
 
+function Update-SitePathExample {
+    param(
+        [System.Windows.Forms.TextBox]$TenantBox,
+        [System.Windows.Forms.ComboBox]$TypeCombo,
+        [System.Windows.Forms.TextBox]$SitePathBox,
+        [System.Windows.Forms.Label]$ExampleLabel
+    )
+
+    if ([string]$TypeCombo.SelectedItem -eq "OneDrive") {
+        $ExampleLabel.Text = "Site path is not used for OneDrive."
+        return
+    }
+
+    $tenant = $TenantBox.Text.Trim().ToLowerInvariant()
+    if ([string]::IsNullOrWhiteSpace($tenant)) {
+        $tenant = "<tenant>"
+    }
+
+    $enteredPath = $SitePathBox.Text.Trim().Trim("/")
+    $defaultPath = "sites/Finance"
+    if ([string]::IsNullOrWhiteSpace($enteredPath)) {
+        $enteredPath = $defaultPath
+    }
+
+    $ExampleLabel.Text = "Format: /sites/... (enter: sites/TeamName). Example URL: https://$tenant.sharepoint.com/$enteredPath"
+}
+
 # ---------------- GUI ----------------
+Ensure-RequiredPowerShell
+
 $form = New-Object System.Windows.Forms.Form
 $form.Text = "MS365 File Mover"
 $form.Size = New-Object System.Drawing.Size(980, 760)
@@ -557,7 +613,7 @@ $form.Controls.Add($lblTenantExample)
 $grpSource = New-Object System.Windows.Forms.GroupBox
 $grpSource.Text = "Source"
 $grpSource.Location = New-Object System.Drawing.Point(20, 85)
-$grpSource.Size = New-Object System.Drawing.Size(450, 250)
+$grpSource.Size = New-Object System.Drawing.Size(450, 270)
 $form.Controls.Add($grpSource)
 
 $srcLblType = New-Object System.Windows.Forms.Label
@@ -586,44 +642,50 @@ $srcSitePath.Size = New-Object System.Drawing.Size(260, 25)
 $srcSitePath.Text = ""
 $grpSource.Controls.Add($srcSitePath)
 
+$srcSiteExample = New-Object System.Windows.Forms.Label
+$srcSiteExample.Location = New-Object System.Drawing.Point(150, 88)
+$srcSiteExample.Size = New-Object System.Drawing.Size(280, 25)
+$srcSiteExample.Text = "Format: /sites/..."
+$grpSource.Controls.Add($srcSiteExample)
+
 $srcLblEmail = New-Object System.Windows.Forms.Label
-$srcLblEmail.Location = New-Object System.Drawing.Point(20, 100)
+$srcLblEmail.Location = New-Object System.Drawing.Point(20, 120)
 $srcLblEmail.Size = New-Object System.Drawing.Size(120, 25)
 $srcLblEmail.Text = "OneDrive email:"
 $grpSource.Controls.Add($srcLblEmail)
 
 $srcEmail = New-Object System.Windows.Forms.TextBox
-$srcEmail.Location = New-Object System.Drawing.Point(150, 98)
+$srcEmail.Location = New-Object System.Drawing.Point(150, 118)
 $srcEmail.Size = New-Object System.Drawing.Size(260, 25)
 $srcEmail.Enabled = $false
 $grpSource.Controls.Add($srcEmail)
 
 $srcLblLibrary = New-Object System.Windows.Forms.Label
-$srcLblLibrary.Location = New-Object System.Drawing.Point(20, 135)
+$srcLblLibrary.Location = New-Object System.Drawing.Point(20, 155)
 $srcLblLibrary.Size = New-Object System.Drawing.Size(120, 25)
 $srcLblLibrary.Text = "Library:"
 $grpSource.Controls.Add($srcLblLibrary)
 
 $srcLibrary = New-Object System.Windows.Forms.TextBox
-$srcLibrary.Location = New-Object System.Drawing.Point(150, 133)
+$srcLibrary.Location = New-Object System.Drawing.Point(150, 153)
 $srcLibrary.Size = New-Object System.Drawing.Size(260, 25)
 $srcLibrary.Text = "Shared Documents"
 $grpSource.Controls.Add($srcLibrary)
 
 $srcLblSub = New-Object System.Windows.Forms.Label
-$srcLblSub.Location = New-Object System.Drawing.Point(20, 170)
+$srcLblSub.Location = New-Object System.Drawing.Point(20, 190)
 $srcLblSub.Size = New-Object System.Drawing.Size(120, 25)
 $srcLblSub.Text = "Subfolder (opt.):"
 $grpSource.Controls.Add($srcLblSub)
 
 $srcSubPath = New-Object System.Windows.Forms.TextBox
-$srcSubPath.Location = New-Object System.Drawing.Point(150, 168)
+$srcSubPath.Location = New-Object System.Drawing.Point(150, 188)
 $srcSubPath.Size = New-Object System.Drawing.Size(260, 25)
 $srcSubPath.Text = ""
 $grpSource.Controls.Add($srcSubPath)
 
 $srcHint = New-Object System.Windows.Forms.Label
-$srcHint.Location = New-Object System.Drawing.Point(20, 205)
+$srcHint.Location = New-Object System.Drawing.Point(20, 223)
 $srcHint.Size = New-Object System.Drawing.Size(400, 35)
 $srcHint.Text = "Library examples: SharePoint = Shared Documents, OneDrive = Documents. Empty subfolder = library root."
 $grpSource.Controls.Add($srcHint)
@@ -631,7 +693,7 @@ $grpSource.Controls.Add($srcHint)
 $grpDest = New-Object System.Windows.Forms.GroupBox
 $grpDest.Text = "Destination"
 $grpDest.Location = New-Object System.Drawing.Point(500, 85)
-$grpDest.Size = New-Object System.Drawing.Size(450, 250)
+$grpDest.Size = New-Object System.Drawing.Size(450, 270)
 $form.Controls.Add($grpDest)
 
 $dstLblType = New-Object System.Windows.Forms.Label
@@ -660,51 +722,57 @@ $dstSitePath.Size = New-Object System.Drawing.Size(260, 25)
 $dstSitePath.Text = ""
 $grpDest.Controls.Add($dstSitePath)
 
+$dstSiteExample = New-Object System.Windows.Forms.Label
+$dstSiteExample.Location = New-Object System.Drawing.Point(150, 88)
+$dstSiteExample.Size = New-Object System.Drawing.Size(280, 25)
+$dstSiteExample.Text = "Format: /sites/..."
+$grpDest.Controls.Add($dstSiteExample)
+
 $dstLblEmail = New-Object System.Windows.Forms.Label
-$dstLblEmail.Location = New-Object System.Drawing.Point(20, 100)
+$dstLblEmail.Location = New-Object System.Drawing.Point(20, 120)
 $dstLblEmail.Size = New-Object System.Drawing.Size(120, 25)
 $dstLblEmail.Text = "OneDrive email:"
 $grpDest.Controls.Add($dstLblEmail)
 
 $dstEmail = New-Object System.Windows.Forms.TextBox
-$dstEmail.Location = New-Object System.Drawing.Point(150, 98)
+$dstEmail.Location = New-Object System.Drawing.Point(150, 118)
 $dstEmail.Size = New-Object System.Drawing.Size(260, 25)
 $dstEmail.Enabled = $false
 $grpDest.Controls.Add($dstEmail)
 
 $dstLblLibrary = New-Object System.Windows.Forms.Label
-$dstLblLibrary.Location = New-Object System.Drawing.Point(20, 135)
+$dstLblLibrary.Location = New-Object System.Drawing.Point(20, 155)
 $dstLblLibrary.Size = New-Object System.Drawing.Size(120, 25)
 $dstLblLibrary.Text = "Library:"
 $grpDest.Controls.Add($dstLblLibrary)
 
 $dstLibrary = New-Object System.Windows.Forms.TextBox
-$dstLibrary.Location = New-Object System.Drawing.Point(150, 133)
+$dstLibrary.Location = New-Object System.Drawing.Point(150, 153)
 $dstLibrary.Size = New-Object System.Drawing.Size(260, 25)
 $dstLibrary.Text = "Shared Documents"
 $grpDest.Controls.Add($dstLibrary)
 
 $dstLblSub = New-Object System.Windows.Forms.Label
-$dstLblSub.Location = New-Object System.Drawing.Point(20, 170)
+$dstLblSub.Location = New-Object System.Drawing.Point(20, 190)
 $dstLblSub.Size = New-Object System.Drawing.Size(120, 25)
 $dstLblSub.Text = "Subfolder (opt.):"
 $grpDest.Controls.Add($dstLblSub)
 
 $dstSubPath = New-Object System.Windows.Forms.TextBox
-$dstSubPath.Location = New-Object System.Drawing.Point(150, 168)
+$dstSubPath.Location = New-Object System.Drawing.Point(150, 188)
 $dstSubPath.Size = New-Object System.Drawing.Size(260, 25)
 $dstSubPath.Text = ""
 $grpDest.Controls.Add($dstSubPath)
 
 $dstHint = New-Object System.Windows.Forms.Label
-$dstHint.Location = New-Object System.Drawing.Point(20, 205)
+$dstHint.Location = New-Object System.Drawing.Point(20, 223)
 $dstHint.Size = New-Object System.Drawing.Size(400, 35)
 $dstHint.Text = "Library examples: SharePoint = Shared Documents, OneDrive = Documents. Empty subfolder = library root."
 $grpDest.Controls.Add($dstHint)
 
 $grpOptions = New-Object System.Windows.Forms.GroupBox
 $grpOptions.Text = "Options"
-$grpOptions.Location = New-Object System.Drawing.Point(20, 350)
+$grpOptions.Location = New-Object System.Drawing.Point(20, 375)
 $grpOptions.Size = New-Object System.Drawing.Size(930, 90)
 $form.Controls.Add($grpOptions)
 
@@ -747,7 +815,7 @@ $btnRun.Text = "Start"
 $grpOptions.Controls.Add($btnRun)
 
 $txtSummary = New-Object System.Windows.Forms.TextBox
-$txtSummary.Location = New-Object System.Drawing.Point(20, 450)
+$txtSummary.Location = New-Object System.Drawing.Point(20, 475)
 $txtSummary.Size = New-Object System.Drawing.Size(930, 50)
 $txtSummary.Multiline = $true
 $txtSummary.ReadOnly = $true
@@ -755,7 +823,7 @@ $txtSummary.BackColor = [System.Drawing.Color]::White
 $form.Controls.Add($txtSummary)
 
 $txtLog = New-Object System.Windows.Forms.TextBox
-$txtLog.Location = New-Object System.Drawing.Point(20, 510)
+$txtLog.Location = New-Object System.Drawing.Point(20, 535)
 $txtLog.Size = New-Object System.Drawing.Size(930, 220)
 $txtLog.Multiline = $true
 $txtLog.ScrollBars = "Vertical"
@@ -767,14 +835,26 @@ $script:LogTextBox = $txtLog
 
 $txtTenant.Add_TextChanged({
     Update-TenantExamples -TenantBox $txtTenant -ExampleLabel $lblTenantExample
+    Update-SitePathExample -TenantBox $txtTenant -TypeCombo $srcType -SitePathBox $srcSitePath -ExampleLabel $srcSiteExample
+    Update-SitePathExample -TenantBox $txtTenant -TypeCombo $dstType -SitePathBox $dstSitePath -ExampleLabel $dstSiteExample
+})
+
+$srcSitePath.Add_TextChanged({
+    Update-SitePathExample -TenantBox $txtTenant -TypeCombo $srcType -SitePathBox $srcSitePath -ExampleLabel $srcSiteExample
+})
+
+$dstSitePath.Add_TextChanged({
+    Update-SitePathExample -TenantBox $txtTenant -TypeCombo $dstType -SitePathBox $dstSitePath -ExampleLabel $dstSiteExample
 })
 
 $srcType.Add_SelectedIndexChanged({
     Update-TypeUi -TypeCombo $srcType -SitePathBox $srcSitePath -EmailBox $srcEmail -LibraryBox $srcLibrary
+    Update-SitePathExample -TenantBox $txtTenant -TypeCombo $srcType -SitePathBox $srcSitePath -ExampleLabel $srcSiteExample
 })
 
 $dstType.Add_SelectedIndexChanged({
     Update-TypeUi -TypeCombo $dstType -SitePathBox $dstSitePath -EmailBox $dstEmail -LibraryBox $dstLibrary
+    Update-SitePathExample -TenantBox $txtTenant -TypeCombo $dstType -SitePathBox $dstSitePath -ExampleLabel $dstSiteExample
 })
 
 $btnFetch.Add_Click({
@@ -877,6 +957,8 @@ $btnRun.Add_Click({
 Update-TypeUi -TypeCombo $srcType -SitePathBox $srcSitePath -EmailBox $srcEmail -LibraryBox $srcLibrary
 Update-TypeUi -TypeCombo $dstType -SitePathBox $dstSitePath -EmailBox $dstEmail -LibraryBox $dstLibrary
 Update-TenantExamples -TenantBox $txtTenant -ExampleLabel $lblTenantExample
+Update-SitePathExample -TenantBox $txtTenant -TypeCombo $srcType -SitePathBox $srcSitePath -ExampleLabel $srcSiteExample
+Update-SitePathExample -TenantBox $txtTenant -TypeCombo $dstType -SitePathBox $dstSitePath -ExampleLabel $dstSiteExample
 
 Write-Log "GUI started. Fill tenant + source/destination and click 'Get overview' first."
 [void]$form.ShowDialog()
