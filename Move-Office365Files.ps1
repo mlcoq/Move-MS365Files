@@ -641,7 +641,7 @@ Ensure-RequiredPowerShell
 
 $form = New-Object System.Windows.Forms.Form
 $form.Text = "MS365 File Mover"
-$form.Size = New-Object System.Drawing.Size(980, 760)
+$form.Size = New-Object System.Drawing.Size(980, 1060)
 $form.StartPosition = "CenterScreen"
 $form.MaximizeBox = $true
 
@@ -753,7 +753,7 @@ $grpSource.Controls.Add($srcSubExample)
 
 $grpDest = New-Object System.Windows.Forms.GroupBox
 $grpDest.Text = "Destination"
-$grpDest.Location = New-Object System.Drawing.Point(500, 85)
+$grpDest.Location = New-Object System.Drawing.Point(20, 390)
 $grpDest.Size = New-Object System.Drawing.Size(450, 295)
 $form.Controls.Add($grpDest)
 
@@ -839,7 +839,7 @@ $grpDest.Controls.Add($dstSubExample)
 
 $grpOptions = New-Object System.Windows.Forms.GroupBox
 $grpOptions.Text = "Options"
-$grpOptions.Location = New-Object System.Drawing.Point(20, 400)
+$grpOptions.Location = New-Object System.Drawing.Point(20, 700)
 $grpOptions.Size = New-Object System.Drawing.Size(930, 90)
 $form.Controls.Add($grpOptions)
 
@@ -882,7 +882,7 @@ $btnRun.Text = "Start"
 $grpOptions.Controls.Add($btnRun)
 
 $txtSummary = New-Object System.Windows.Forms.TextBox
-$txtSummary.Location = New-Object System.Drawing.Point(20, 500)
+$txtSummary.Location = New-Object System.Drawing.Point(20, 800)
 $txtSummary.Size = New-Object System.Drawing.Size(930, 50)
 $txtSummary.Multiline = $true
 $txtSummary.ReadOnly = $true
@@ -890,8 +890,8 @@ $txtSummary.BackColor = [System.Drawing.Color]::White
 $form.Controls.Add($txtSummary)
 
 $txtLog = New-Object System.Windows.Forms.TextBox
-$txtLog.Location = New-Object System.Drawing.Point(20, 560)
-$txtLog.Size = New-Object System.Drawing.Size(930, 190)
+$txtLog.Location = New-Object System.Drawing.Point(20, 860)
+$txtLog.Size = New-Object System.Drawing.Size(930, 160)
 $txtLog.Multiline = $true
 $txtLog.ScrollBars = "Vertical"
 $txtLog.ReadOnly = $true
