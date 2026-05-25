@@ -23,6 +23,58 @@ $script:FileLoggingEnabled = $false
 $script:LogTextBox = $null
 $script:LastOverview = $null
 $script:TenantConnection = $null
+$script:StateRoot = Join-Path $env:LOCALAPPDATA "MS365Mover"
+$script:TenantRegistrationPath = Join-Path $script:StateRoot "tenant-registration.json"
+
+function Ensure-StateRoot {
+    if (-not (Test-Path -Path $script:StateRoot)) {
+        New-Item -Path $script:StateRoot -ItemType Directory -Force | Out-Null
+    }
+}
+
+function Save-TenantRegistration {
+    param(
+        [string]$Tenant,
+        [int]$Days
+    )
+
+    Ensure-StateRoot
+
+    $safeDays = [Math]::Max(1, $Days)
+    $data = [pscustomobject]@{
+        tenant = $Tenant.Trim().ToLowerInvariant()
+        expiresUtc = (Get-Date).ToUniversalTime().AddDays($safeDays).ToString("o")
+    }
+
+    $data | ConvertTo-Json | Set-Content -Path $script:TenantRegistrationPath -Encoding UTF8
+}
+
+function Load-TenantRegistration {
+    if (-not (Test-Path -Path $script:TenantRegistrationPath)) {
+        return $null
+    }
+
+    try {
+        $data = Get-Content -Path $script:TenantRegistrationPath -Raw | ConvertFrom-Json
+        if ([string]::IsNullOrWhiteSpace($data.tenant) -or [string]::IsNullOrWhiteSpace($data.expiresUtc)) {
+            return $null
+        }
+
+        $expiresUtc = [DateTime]::Parse($data.expiresUtc).ToUniversalTime()
+        if ((Get-Date).ToUniversalTime() -ge $expiresUtc) {
+            Remove-Item -Path $script:TenantRegistrationPath -Force -ErrorAction SilentlyContinue
+            return $null
+        }
+
+        return [string]$data.tenant
+    } catch {
+        return $null
+    }
+}
+
+function Clear-TenantRegistration {
+    Remove-Item -Path $script:TenantRegistrationPath -Force -ErrorAction SilentlyContinue
+}
 
 function Ensure-RequiredPowerShell {
     $required = [version]"7.4.0"
@@ -892,6 +944,27 @@ $btnTenantDisconnect.Text = "Disconnect"
 $btnTenantDisconnect.Visible = $false
 $form.Controls.Add($btnTenantDisconnect)
 
+$chkRememberTenant = New-Object System.Windows.Forms.CheckBox
+$chkRememberTenant.Location = New-Object System.Drawing.Point(380, 52)
+$chkRememberTenant.Size = New-Object System.Drawing.Size(130, 22)
+$chkRememberTenant.Text = "Remember tenant"
+$chkRememberTenant.Checked = $true
+$form.Controls.Add($chkRememberTenant)
+
+$numTenantDays = New-Object System.Windows.Forms.NumericUpDown
+$numTenantDays.Location = New-Object System.Drawing.Point(515, 50)
+$numTenantDays.Size = New-Object System.Drawing.Size(55, 22)
+$numTenantDays.Minimum = 1
+$numTenantDays.Maximum = 365
+$numTenantDays.Value = 30
+$form.Controls.Add($numTenantDays)
+
+$lblTenantDays = New-Object System.Windows.Forms.Label
+$lblTenantDays.Location = New-Object System.Drawing.Point(575, 52)
+$lblTenantDays.Size = New-Object System.Drawing.Size(60, 22)
+$lblTenantDays.Text = "days"
+$form.Controls.Add($lblTenantDays)
+
 $lblTenantExample = New-Object System.Windows.Forms.Label
 $lblTenantExample.Location = New-Object System.Drawing.Point(20, 78)
 $lblTenantExample.Size = New-Object System.Drawing.Size(930, 30)
@@ -1151,6 +1224,12 @@ $btnTenantConnect.Add_Click({
         Write-Log "Connecting to tenant: $tenantUrl"
         $script:TenantConnection = Connect-PnPOnline -Url $tenantUrl -Interactive -ReturnConnection -ErrorAction Stop
         Write-Log "Connected to tenant: $tenantUrl" "SUCCESS"
+
+        if ($chkRememberTenant.Checked) {
+            Save-TenantRegistration -Tenant $tenant -Days ([int]$numTenantDays.Value)
+            Write-Log "Tenant registration saved for $([int]$numTenantDays.Value) day(s)." "SUCCESS"
+        }
+
         Update-TenantConnectionUi -TenantBox $txtTenant -ConnectButton $btnTenantConnect -DisconnectButton $btnTenantDisconnect -TenantExampleLabel $lblTenantExample -IsConnected $true
         [System.Windows.Forms.MessageBox]::Show("Connected to $tenantUrl", "Connected", "OK", "Information") | Out-Null
     } catch {
@@ -1171,6 +1250,14 @@ $btnTenantDisconnect.Add_Click({
     } catch {
         Write-Log "Tenant disconnect failed: $_" "ERROR"
         [System.Windows.Forms.MessageBox]::Show("Tenant disconnect failed: $_", "Error", "OK", "Error") | Out-Null
+    }
+})
+
+$chkRememberTenant.Add_CheckedChanged({
+    $numTenantDays.Enabled = $chkRememberTenant.Checked
+    if (-not $chkRememberTenant.Checked) {
+        Clear-TenantRegistration
+        Write-Log "Tenant registration cleared." "INFO"
     }
 })
 
@@ -1328,6 +1415,14 @@ $btnRun.Add_Click({
 
 Update-TypeUi -TypeCombo $srcType -SitePathBox $srcSitePath -EmailBox $srcEmail -LibraryBox $srcLibrary
 Update-TypeUi -TypeCombo $dstType -SitePathBox $dstSitePath -EmailBox $dstEmail -LibraryBox $dstLibrary
+
+$registeredTenant = Load-TenantRegistration
+if (-not [string]::IsNullOrWhiteSpace($registeredTenant) -and [string]::IsNullOrWhiteSpace($txtTenant.Text)) {
+    $txtTenant.Text = $registeredTenant
+    Write-Log "Loaded saved tenant registration." "INFO"
+}
+
+$numTenantDays.Enabled = $chkRememberTenant.Checked
 Update-TenantConnectionUi -TenantBox $txtTenant -ConnectButton $btnTenantConnect -DisconnectButton $btnTenantDisconnect -TenantExampleLabel $lblTenantExample -IsConnected $false
 Update-EndpointUiState -TenantBox $txtTenant -TypeCombo $srcType -SitePathBox $srcSitePath -EmailBox $srcEmail -LibraryBox $srcLibrary -SubPathBox $srcSubPath -SiteExampleLabel $srcSiteExample -LibraryExampleLabel $srcLibraryExample -SubfolderExampleLabel $srcSubExample
 Update-EndpointUiState -TenantBox $txtTenant -TypeCombo $dstType -SitePathBox $dstSitePath -EmailBox $dstEmail -LibraryBox $dstLibrary -SubPathBox $dstSubPath -SiteExampleLabel $dstSiteExample -LibraryExampleLabel $dstLibraryExample -SubfolderExampleLabel $dstSubExample
