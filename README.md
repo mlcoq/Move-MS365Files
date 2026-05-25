@@ -1,70 +1,65 @@
 # Office365FileMover
 
-PowerShell script to recursively copy or move files and folders between SharePoint Online and/or OneDrive for Business locations using PnP PowerShell.
+GUI-based PowerShell tool to copy or move files between SharePoint Online and OneDrive for Business.
+
+The script asks for:
+- Tenant name (without `.sharepoint.com`)
+- Source type: SharePoint or OneDrive
+- Destination type: SharePoint or OneDrive
+- Library name
+- Optional subfolder (empty = root of library)
+- OneDrive email when OneDrive is selected
+- Action: Kopieren or Verplaatsen
+- Optional WhatIf mode (no writes)
 
 ## Requirements
 
 - PowerShell 5.1 or later
-- PnP.PowerShell module (or legacy `SharePointPnPPowerShellOnline`)
+- PnP.PowerShell module
 
 ```powershell
 Install-Module PnP.PowerShell -Scope CurrentUser
 ```
 
-## Usage
+## Run
 
 ```powershell
-# Dry run — shows what would happen, no changes made
-.\Move-Office365Files.ps1 -WhatIf
-
-# Copy only — keeps source files intact
-.\Move-Office365Files.ps1 -CopyOnly
-
-# Full move — copies to destination, then deletes source
 .\Move-Office365Files.ps1
 ```
 
-## Configuration
+## Workflow
 
-Edit the variables at the top of the script:
+1. Vul tenant, bron en doel in.
+2. Klik `Ophalen overzicht` om structuur op te halen van de bron:
+	 - totaal aantal files
+	 - totaal aantal folders
+	 - totale grootte in GB
+3. (Optioneel) Klik `Export CSV` om dit overzicht op te slaan.
+4. Kies `Kopieren` of `Verplaatsen`.
+5. Klik `Start`.
 
-| Variable | Description |
-|---|---|
-| `$SourceSiteUrl` | Full URL of the source SharePoint / OneDrive site |
-| `$SourceFolderRel` | Site-relative path of the source folder |
-| `$DestSiteUrl` | Full URL of the destination site |
-| `$DestFolderAbs` | Server-relative path of the destination folder |
+## Input notes
 
-### SharePoint Online example
+- For SharePoint:
+	- `Site pad` is relative to tenant root, e.g. `sites/Finance`.
+	- `Library` is typically `Shared Documents`.
+- For OneDrive:
+	- Enter the OneDrive owner email.
+	- Script converts email to the correct `/personal/...` URL segment.
+	- `Library` is typically `Documents`.
+- Empty subfolder means library root.
 
-```powershell
-$SourceSiteUrl   = "https://<tenant>.sharepoint.com/sites/<SourceSite>"
-$SourceFolderRel = "Shared Documents/Reports"
+## Supported combinations
 
-$DestSiteUrl     = "https://<tenant>.sharepoint.com/sites/<DestSite>"
-$DestFolderAbs   = "/sites/<DestSite>/Shared Documents/Reports"
-```
+- SharePoint -> SharePoint
+- SharePoint -> OneDrive for Business
+- OneDrive for Business -> SharePoint
+- OneDrive for Business -> OneDrive for Business
 
-### OneDrive for Business example
+## Important
 
-```powershell
-$SourceSiteUrl   = "https://<tenant>-my.sharepoint.com/personal/<user>_<domain>_com"
-$SourceFolderRel = "Documents/Reports"
-
-$DestSiteUrl     = "https://<tenant>.sharepoint.com/sites/<DestSite>"
-$DestFolderAbs   = "/sites/<DestSite>/Shared Documents/Reports"
-```
-
-> **Note:** OneDrive for Business is supported because it runs on SharePoint Online.  
-> Personal OneDrive (consumer Microsoft accounts) is **not** supported.
-
-## Features
-
-- Recursive copy of all files and subfolders
-- Dry run mode (`-WhatIf`) — no changes are made
-- Copy-only mode — source files are not deleted
-- Full move mode — copies then deletes source
-- Timestamped log file saved next to the script
-- Confirmation prompt before any changes
-- Works across different sites and between SharePoint ↔ OneDrive for Business
-- Auto-installs PnP module if not present
+- OneDrive for Business is supported.
+- Personal OneDrive (consumer Microsoft accounts) is not supported.
+- Authentication uses interactive login and may be done with an admin account.
+- Source and destination library are validated before migration starts.
+- Log file is created next to the script with timestamp.
