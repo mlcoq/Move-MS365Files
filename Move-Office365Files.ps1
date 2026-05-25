@@ -668,7 +668,7 @@ $form.Controls.Add($lblTenantExample)
 $grpSource = New-Object System.Windows.Forms.GroupBox
 $grpSource.Text = "Source"
 $grpSource.Location = New-Object System.Drawing.Point(20, 85)
-$grpSource.Size = New-Object System.Drawing.Size(450, 295)
+$grpSource.Size = New-Object System.Drawing.Size(675, 295)
 $form.Controls.Add($grpSource)
 
 $srcLblType = New-Object System.Windows.Forms.Label
@@ -679,7 +679,7 @@ $grpSource.Controls.Add($srcLblType)
 
 $srcType = New-Object System.Windows.Forms.ComboBox
 $srcType.Location = New-Object System.Drawing.Point(150, 28)
-$srcType.Size = New-Object System.Drawing.Size(260, 25)
+$srcType.Size = New-Object System.Drawing.Size(485, 25)
 $srcType.DropDownStyle = "DropDownList"
 [void]$srcType.Items.AddRange(@("SharePoint", "OneDrive"))
 $srcType.SelectedIndex = 0
@@ -693,13 +693,13 @@ $grpSource.Controls.Add($srcLblSite)
 
 $srcSitePath = New-Object System.Windows.Forms.TextBox
 $srcSitePath.Location = New-Object System.Drawing.Point(150, 63)
-$srcSitePath.Size = New-Object System.Drawing.Size(260, 25)
+$srcSitePath.Size = New-Object System.Drawing.Size(485, 25)
 $srcSitePath.Text = ""
 $grpSource.Controls.Add($srcSitePath)
 
 $srcSiteExample = New-Object System.Windows.Forms.Label
 $srcSiteExample.Location = New-Object System.Drawing.Point(150, 88)
-$srcSiteExample.Size = New-Object System.Drawing.Size(280, 25)
+$srcSiteExample.Size = New-Object System.Drawing.Size(485, 25)
 $srcSiteExample.Text = "https://"
 $grpSource.Controls.Add($srcSiteExample)
 
@@ -711,7 +711,7 @@ $grpSource.Controls.Add($srcLblEmail)
 
 $srcEmail = New-Object System.Windows.Forms.TextBox
 $srcEmail.Location = New-Object System.Drawing.Point(150, 118)
-$srcEmail.Size = New-Object System.Drawing.Size(260, 25)
+$srcEmail.Size = New-Object System.Drawing.Size(485, 25)
 $srcEmail.Enabled = $false
 $grpSource.Controls.Add($srcEmail)
 
@@ -723,13 +723,13 @@ $grpSource.Controls.Add($srcLblLibrary)
 
 $srcLibrary = New-Object System.Windows.Forms.TextBox
 $srcLibrary.Location = New-Object System.Drawing.Point(150, 153)
-$srcLibrary.Size = New-Object System.Drawing.Size(260, 25)
+$srcLibrary.Size = New-Object System.Drawing.Size(485, 25)
 $srcLibrary.Text = "Shared Documents"
 $grpSource.Controls.Add($srcLibrary)
 
 $srcLibraryExample = New-Object System.Windows.Forms.Label
 $srcLibraryExample.Location = New-Object System.Drawing.Point(150, 178)
-$srcLibraryExample.Size = New-Object System.Drawing.Size(280, 25)
+$srcLibraryExample.Size = New-Object System.Drawing.Size(485, 25)
 $srcLibraryExample.Text = "https://"
 $grpSource.Controls.Add($srcLibraryExample)
 
@@ -741,20 +741,20 @@ $grpSource.Controls.Add($srcLblSub)
 
 $srcSubPath = New-Object System.Windows.Forms.TextBox
 $srcSubPath.Location = New-Object System.Drawing.Point(150, 213)
-$srcSubPath.Size = New-Object System.Drawing.Size(260, 25)
+$srcSubPath.Size = New-Object System.Drawing.Size(485, 25)
 $srcSubPath.Text = ""
 $grpSource.Controls.Add($srcSubPath)
 
 $srcSubExample = New-Object System.Windows.Forms.Label
 $srcSubExample.Location = New-Object System.Drawing.Point(150, 238)
-$srcSubExample.Size = New-Object System.Drawing.Size(280, 45)
+$srcSubExample.Size = New-Object System.Drawing.Size(485, 45)
 $srcSubExample.Text = "https://"
 $grpSource.Controls.Add($srcSubExample)
 
 $grpDest = New-Object System.Windows.Forms.GroupBox
 $grpDest.Text = "Destination"
 $grpDest.Location = New-Object System.Drawing.Point(20, 390)
-$grpDest.Size = New-Object System.Drawing.Size(450, 295)
+$grpDest.Size = New-Object System.Drawing.Size(675, 295)
 $form.Controls.Add($grpDest)
 
 $dstLblType = New-Object System.Windows.Forms.Label
@@ -765,7 +765,7 @@ $grpDest.Controls.Add($dstLblType)
 
 $dstType = New-Object System.Windows.Forms.ComboBox
 $dstType.Location = New-Object System.Drawing.Point(150, 28)
-$dstType.Size = New-Object System.Drawing.Size(260, 25)
+$dstType.Size = New-Object System.Drawing.Size(485, 25)
 $dstType.DropDownStyle = "DropDownList"
 [void]$dstType.Items.AddRange(@("SharePoint", "OneDrive"))
 $dstType.SelectedIndex = 0
@@ -779,13 +779,13 @@ $grpDest.Controls.Add($dstLblSite)
 
 $dstSitePath = New-Object System.Windows.Forms.TextBox
 $dstSitePath.Location = New-Object System.Drawing.Point(150, 63)
-$dstSitePath.Size = New-Object System.Drawing.Size(260, 25)
+$dstSitePath.Size = New-Object System.Drawing.Size(485, 25)
 $dstSitePath.Text = ""
 $grpDest.Controls.Add($dstSitePath)
 
 $dstSiteExample = New-Object System.Windows.Forms.Label
 $dstSiteExample.Location = New-Object System.Drawing.Point(150, 88)
-$dstSiteExample.Size = New-Object System.Drawing.Size(280, 25)
+$dstSiteExample.Size = New-Object System.Drawing.Size(485, 25)
 $dstSiteExample.Text = "https://"
 $grpDest.Controls.Add($dstSiteExample)
 
@@ -797,7 +797,7 @@ $grpDest.Controls.Add($dstLblEmail)
 
 $dstEmail = New-Object System.Windows.Forms.TextBox
 $dstEmail.Location = New-Object System.Drawing.Point(150, 118)
-$dstEmail.Size = New-Object System.Drawing.Size(260, 25)
+$dstEmail.Size = New-Object System.Drawing.Size(485, 25)
 $dstEmail.Enabled = $false
 $grpDest.Controls.Add($dstEmail)
 
@@ -809,13 +809,13 @@ $grpDest.Controls.Add($dstLblLibrary)
 
 $dstLibrary = New-Object System.Windows.Forms.TextBox
 $dstLibrary.Location = New-Object System.Drawing.Point(150, 153)
-$dstLibrary.Size = New-Object System.Drawing.Size(260, 25)
+$dstLibrary.Size = New-Object System.Drawing.Size(485, 25)
 $dstLibrary.Text = "Shared Documents"
 $grpDest.Controls.Add($dstLibrary)
 
 $dstLibraryExample = New-Object System.Windows.Forms.Label
 $dstLibraryExample.Location = New-Object System.Drawing.Point(150, 178)
-$dstLibraryExample.Size = New-Object System.Drawing.Size(280, 25)
+$dstLibraryExample.Size = New-Object System.Drawing.Size(485, 25)
 $dstLibraryExample.Text = "https://"
 $grpDest.Controls.Add($dstLibraryExample)
 
@@ -827,13 +827,13 @@ $grpDest.Controls.Add($dstLblSub)
 
 $dstSubPath = New-Object System.Windows.Forms.TextBox
 $dstSubPath.Location = New-Object System.Drawing.Point(150, 213)
-$dstSubPath.Size = New-Object System.Drawing.Size(260, 25)
+$dstSubPath.Size = New-Object System.Drawing.Size(485, 25)
 $dstSubPath.Text = ""
 $grpDest.Controls.Add($dstSubPath)
 
 $dstSubExample = New-Object System.Windows.Forms.Label
 $dstSubExample.Location = New-Object System.Drawing.Point(150, 238)
-$dstSubExample.Size = New-Object System.Drawing.Size(280, 45)
+$dstSubExample.Size = New-Object System.Drawing.Size(485, 45)
 $dstSubExample.Text = "https://"
 $grpDest.Controls.Add($dstSubExample)
 
