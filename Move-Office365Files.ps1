@@ -120,6 +120,57 @@ function Normalize-SharePointSitePath {
     return "sites/$path"
 }
 
+function Get-SharePointSitePathValidation {
+    param([string]$SitePath)
+
+    $raw = $SitePath.Trim()
+    if ([string]::IsNullOrWhiteSpace($raw)) {
+        return [pscustomobject]@{ IsValid = $false; Error = "Site path is required."; Normalized = "" }
+    }
+
+    if ($raw -match "^(?i)https?://") {
+        return [pscustomobject]@{ IsValid = $false; Error = "Enter only the site path, not a full URL."; Normalized = "" }
+    }
+
+    $trimmed = $raw.Trim("/")
+    $withoutPrefix = $trimmed -replace "^(?i)sites/", ""
+    if ([string]::IsNullOrWhiteSpace($withoutPrefix)) {
+        return [pscustomobject]@{ IsValid = $false; Error = "Site path is required."; Normalized = "" }
+    }
+
+    if ($withoutPrefix.Contains("/")) {
+        return [pscustomobject]@{ IsValid = $false; Error = "Site path cannot contain extra '/' segments."; Normalized = "" }
+    }
+
+    if ($withoutPrefix -match "(?i)shared\s*documents|documents") {
+        return [pscustomobject]@{ IsValid = $false; Error = "Do not include a library name in site path."; Normalized = "" }
+    }
+
+    $normalized = Normalize-SharePointSitePath -SitePath $withoutPrefix
+    return [pscustomobject]@{ IsValid = $true; Error = ""; Normalized = $normalized }
+}
+
+function Set-ExampleLabelState {
+    param(
+        [System.Windows.Forms.Label]$Label,
+        [string]$Text,
+        [bool]$IsError,
+        [bool]$Show
+    )
+
+    if (-not $Show) {
+        $Label.Text = ""
+        return
+    }
+
+    $Label.Text = $Text
+    if ($IsError) {
+        $Label.ForeColor = [System.Drawing.Color]::Firebrick
+    } else {
+        $Label.ForeColor = [System.Drawing.Color]::ForestGreen
+    }
+}
+
 function Build-Endpoint {
     param(
         [string]$Tenant,
@@ -579,8 +630,14 @@ function Update-SitePathExample {
         [System.Windows.Forms.TextBox]$TenantBox,
         [System.Windows.Forms.ComboBox]$TypeCombo,
         [System.Windows.Forms.TextBox]$SitePathBox,
-        [System.Windows.Forms.Label]$ExampleLabel
+        [System.Windows.Forms.Label]$ExampleLabel,
+        [bool]$ShowExample
     )
+
+    if (-not $ShowExample) {
+        Set-ExampleLabelState -Label $ExampleLabel -Text "" -IsError $false -Show $false
+        return
+    }
 
     $tenant = $TenantBox.Text.Trim().ToLowerInvariant()
     if ([string]::IsNullOrWhiteSpace($tenant)) {
@@ -588,19 +645,17 @@ function Update-SitePathExample {
     }
 
     if ([string]$TypeCombo.SelectedItem -eq "OneDrive") {
-        $ExampleLabel.Text = "https://$tenant-my.sharepoint.com/personal/john_doe_contoso_com"
+        Set-ExampleLabelState -Label $ExampleLabel -Text "https://$tenant-my.sharepoint.com/personal/john_doe_contoso_com" -IsError $false -Show $true
         return
     }
 
-    $enteredPath = $SitePathBox.Text.Trim().Trim("/")
-    $defaultPath = "Finance"
-    if ([string]::IsNullOrWhiteSpace($enteredPath)) {
-        $enteredPath = $defaultPath
+    $siteValidation = Get-SharePointSitePathValidation -SitePath $SitePathBox.Text
+    if (-not $siteValidation.IsValid) {
+        Set-ExampleLabelState -Label $ExampleLabel -Text $siteValidation.Error -IsError $true -Show $true
+        return
     }
 
-    $enteredPath = Normalize-SharePointSitePath -SitePath $enteredPath
-
-    $ExampleLabel.Text = "https://$tenant.sharepoint.com/$enteredPath"
+    Set-ExampleLabelState -Label $ExampleLabel -Text "https://$tenant.sharepoint.com/$($siteValidation.Normalized)" -IsError $false -Show $true
 }
 
 function Update-LibrarySubfolderExamples {
@@ -608,11 +663,25 @@ function Update-LibrarySubfolderExamples {
         [System.Windows.Forms.TextBox]$TenantBox,
         [System.Windows.Forms.ComboBox]$TypeCombo,
         [System.Windows.Forms.TextBox]$SitePathBox,
+        [System.Windows.Forms.TextBox]$EmailBox,
         [System.Windows.Forms.TextBox]$LibraryBox,
         [System.Windows.Forms.TextBox]$SubPathBox,
         [System.Windows.Forms.Label]$LibraryExampleLabel,
-        [System.Windows.Forms.Label]$SubfolderExampleLabel
+        [System.Windows.Forms.Label]$SubfolderExampleLabel,
+        [bool]$ShowLibraryExample,
+        [bool]$ShowSubfolderExample
     )
+
+    if (-not $ShowLibraryExample) {
+        Set-ExampleLabelState -Label $LibraryExampleLabel -Text "" -IsError $false -Show $false
+    }
+    if (-not $ShowSubfolderExample) {
+        Set-ExampleLabelState -Label $SubfolderExampleLabel -Text "" -IsError $false -Show $false
+    }
+
+    if (-not $ShowLibraryExample -and -not $ShowSubfolderExample) {
+        return
+    }
 
     $tenant = $TenantBox.Text.Trim().ToLowerInvariant()
     if ([string]::IsNullOrWhiteSpace($tenant)) {
@@ -621,11 +690,11 @@ function Update-LibrarySubfolderExamples {
 
     $library = $LibraryBox.Text.Trim().Trim("/")
     if ([string]::IsNullOrWhiteSpace($library)) {
-        if ([string]$TypeCombo.SelectedItem -eq "OneDrive") {
-            $library = "Documents"
-        } else {
-            $library = "Shared Documents"
+        if ($ShowLibraryExample) {
+            Set-ExampleLabelState -Label $LibraryExampleLabel -Text "Library is required." -IsError $true -Show $true
         }
+        Set-ExampleLabelState -Label $SubfolderExampleLabel -Text "" -IsError $false -Show $false
+        return
     }
 
     $subPath = $SubPathBox.Text.Trim().Trim("/")
@@ -634,22 +703,86 @@ function Update-LibrarySubfolderExamples {
     }
 
     if ([string]$TypeCombo.SelectedItem -eq "OneDrive") {
+        if ([string]::IsNullOrWhiteSpace($EmailBox.Text.Trim())) {
+            if ($ShowLibraryExample) {
+                Set-ExampleLabelState -Label $LibraryExampleLabel -Text "OneDrive email is required." -IsError $true -Show $true
+            }
+            Set-ExampleLabelState -Label $SubfolderExampleLabel -Text "" -IsError $false -Show $false
+            return
+        }
+
         $baseUrl = "https://$tenant-my.sharepoint.com/personal/john_doe_contoso_com"
-        $LibraryExampleLabel.Text = "$baseUrl/$library"
-        $SubfolderExampleLabel.Text = "$baseUrl/$library/$subPath"
+        if ($ShowLibraryExample) {
+            Set-ExampleLabelState -Label $LibraryExampleLabel -Text "$baseUrl/$library" -IsError $false -Show $true
+        }
+        if ($ShowSubfolderExample) {
+            Set-ExampleLabelState -Label $SubfolderExampleLabel -Text "$baseUrl/$library/$subPath" -IsError $false -Show $true
+        }
         return
     }
 
-    $sitePath = $SitePathBox.Text.Trim().Trim("/")
-    if ([string]::IsNullOrWhiteSpace($sitePath)) {
-        $sitePath = "Finance"
+    $siteValidation = Get-SharePointSitePathValidation -SitePath $SitePathBox.Text
+    if (-not $siteValidation.IsValid) {
+        if ($ShowLibraryExample) {
+            Set-ExampleLabelState -Label $LibraryExampleLabel -Text $siteValidation.Error -IsError $true -Show $true
+        }
+        Set-ExampleLabelState -Label $SubfolderExampleLabel -Text "" -IsError $false -Show $false
+        return
     }
 
-    $sitePath = Normalize-SharePointSitePath -SitePath $sitePath
+    $baseUrl = "https://$tenant.sharepoint.com/$($siteValidation.Normalized)"
+    if ($ShowLibraryExample) {
+        Set-ExampleLabelState -Label $LibraryExampleLabel -Text "$baseUrl/$library" -IsError $false -Show $true
+    }
+    if ($ShowSubfolderExample) {
+        Set-ExampleLabelState -Label $SubfolderExampleLabel -Text "$baseUrl/$library/$subPath" -IsError $false -Show $true
+    }
+}
 
-    $baseUrl = "https://$tenant.sharepoint.com/$sitePath"
-    $LibraryExampleLabel.Text = "$baseUrl/$library"
-    $SubfolderExampleLabel.Text = "$baseUrl/$library/$subPath"
+function Update-EndpointUiState {
+    param(
+        [System.Windows.Forms.TextBox]$TenantBox,
+        [System.Windows.Forms.ComboBox]$TypeCombo,
+        [System.Windows.Forms.TextBox]$SitePathBox,
+        [System.Windows.Forms.TextBox]$EmailBox,
+        [System.Windows.Forms.TextBox]$LibraryBox,
+        [System.Windows.Forms.TextBox]$SubPathBox,
+        [System.Windows.Forms.Label]$SiteExampleLabel,
+        [System.Windows.Forms.Label]$LibraryExampleLabel,
+        [System.Windows.Forms.Label]$SubfolderExampleLabel
+    )
+
+    $tenantFilled = -not [string]::IsNullOrWhiteSpace($TenantBox.Text.Trim())
+    $isOneDrive = ([string]$TypeCombo.SelectedItem -eq "OneDrive")
+
+    $SitePathBox.Enabled = $tenantFilled -and (-not $isOneDrive)
+    $EmailBox.Enabled = $tenantFilled -and $isOneDrive
+
+    $siteValidation = Get-SharePointSitePathValidation -SitePath $SitePathBox.Text
+    $siteReady = $SitePathBox.Enabled -and $siteValidation.IsValid
+    $emailReady = $EmailBox.Enabled -and (-not [string]::IsNullOrWhiteSpace($EmailBox.Text.Trim()))
+
+    if ($isOneDrive) {
+        $LibraryBox.Enabled = $tenantFilled -and $emailReady
+    } else {
+        $LibraryBox.Enabled = $tenantFilled -and $siteReady
+    }
+
+    $libraryFilled = -not [string]::IsNullOrWhiteSpace($LibraryBox.Text.Trim())
+    $SubPathBox.Enabled = $LibraryBox.Enabled -and $libraryFilled
+
+    Update-SitePathExample -TenantBox $TenantBox -TypeCombo $TypeCombo -SitePathBox $SitePathBox -ExampleLabel $SiteExampleLabel -ShowExample $SitePathBox.Enabled
+    Update-LibrarySubfolderExamples `
+        -TenantBox $TenantBox `
+        -TypeCombo $TypeCombo `
+        -SitePathBox $SitePathBox `
+        -EmailBox $EmailBox `
+        -LibraryBox $LibraryBox `
+        -SubPathBox $SubPathBox `
+        -LibraryExampleLabel $LibraryExampleLabel `
+        -SubfolderExampleLabel $SubfolderExampleLabel `
+        -ShowLibraryExample $LibraryBox.Enabled `
+        -ShowSubfolderExample $SubPathBox.Enabled
 }
 
 # ---------------- GUI ----------------
@@ -918,48 +1051,50 @@ $script:LogTextBox = $txtLog
 
 $txtTenant.Add_TextChanged({
     Update-TenantExamples -TenantBox $txtTenant -ExampleLabel $lblTenantExample
-    Update-SitePathExample -TenantBox $txtTenant -TypeCombo $srcType -SitePathBox $srcSitePath -ExampleLabel $srcSiteExample
-    Update-SitePathExample -TenantBox $txtTenant -TypeCombo $dstType -SitePathBox $dstSitePath -ExampleLabel $dstSiteExample
-    Update-LibrarySubfolderExamples -TenantBox $txtTenant -TypeCombo $srcType -SitePathBox $srcSitePath -LibraryBox $srcLibrary -SubPathBox $srcSubPath -LibraryExampleLabel $srcLibraryExample -SubfolderExampleLabel $srcSubExample
-    Update-LibrarySubfolderExamples -TenantBox $txtTenant -TypeCombo $dstType -SitePathBox $dstSitePath -LibraryBox $dstLibrary -SubPathBox $dstSubPath -LibraryExampleLabel $dstLibraryExample -SubfolderExampleLabel $dstSubExample
+    Update-EndpointUiState -TenantBox $txtTenant -TypeCombo $srcType -SitePathBox $srcSitePath -EmailBox $srcEmail -LibraryBox $srcLibrary -SubPathBox $srcSubPath -SiteExampleLabel $srcSiteExample -LibraryExampleLabel $srcLibraryExample -SubfolderExampleLabel $srcSubExample
+    Update-EndpointUiState -TenantBox $txtTenant -TypeCombo $dstType -SitePathBox $dstSitePath -EmailBox $dstEmail -LibraryBox $dstLibrary -SubPathBox $dstSubPath -SiteExampleLabel $dstSiteExample -LibraryExampleLabel $dstLibraryExample -SubfolderExampleLabel $dstSubExample
 })
 
 $srcSitePath.Add_TextChanged({
-    Update-SitePathExample -TenantBox $txtTenant -TypeCombo $srcType -SitePathBox $srcSitePath -ExampleLabel $srcSiteExample
-    Update-LibrarySubfolderExamples -TenantBox $txtTenant -TypeCombo $srcType -SitePathBox $srcSitePath -LibraryBox $srcLibrary -SubPathBox $srcSubPath -LibraryExampleLabel $srcLibraryExample -SubfolderExampleLabel $srcSubExample
+    Update-EndpointUiState -TenantBox $txtTenant -TypeCombo $srcType -SitePathBox $srcSitePath -EmailBox $srcEmail -LibraryBox $srcLibrary -SubPathBox $srcSubPath -SiteExampleLabel $srcSiteExample -LibraryExampleLabel $srcLibraryExample -SubfolderExampleLabel $srcSubExample
 })
 
 $dstSitePath.Add_TextChanged({
-    Update-SitePathExample -TenantBox $txtTenant -TypeCombo $dstType -SitePathBox $dstSitePath -ExampleLabel $dstSiteExample
-    Update-LibrarySubfolderExamples -TenantBox $txtTenant -TypeCombo $dstType -SitePathBox $dstSitePath -LibraryBox $dstLibrary -SubPathBox $dstSubPath -LibraryExampleLabel $dstLibraryExample -SubfolderExampleLabel $dstSubExample
+    Update-EndpointUiState -TenantBox $txtTenant -TypeCombo $dstType -SitePathBox $dstSitePath -EmailBox $dstEmail -LibraryBox $dstLibrary -SubPathBox $dstSubPath -SiteExampleLabel $dstSiteExample -LibraryExampleLabel $dstLibraryExample -SubfolderExampleLabel $dstSubExample
+})
+
+$srcEmail.Add_TextChanged({
+    Update-EndpointUiState -TenantBox $txtTenant -TypeCombo $srcType -SitePathBox $srcSitePath -EmailBox $srcEmail -LibraryBox $srcLibrary -SubPathBox $srcSubPath -SiteExampleLabel $srcSiteExample -LibraryExampleLabel $srcLibraryExample -SubfolderExampleLabel $srcSubExample
+})
+
+$dstEmail.Add_TextChanged({
+    Update-EndpointUiState -TenantBox $txtTenant -TypeCombo $dstType -SitePathBox $dstSitePath -EmailBox $dstEmail -LibraryBox $dstLibrary -SubPathBox $dstSubPath -SiteExampleLabel $dstSiteExample -LibraryExampleLabel $dstLibraryExample -SubfolderExampleLabel $dstSubExample
 })
 
 $srcLibrary.Add_TextChanged({
-    Update-LibrarySubfolderExamples -TenantBox $txtTenant -TypeCombo $srcType -SitePathBox $srcSitePath -LibraryBox $srcLibrary -SubPathBox $srcSubPath -LibraryExampleLabel $srcLibraryExample -SubfolderExampleLabel $srcSubExample
+    Update-EndpointUiState -TenantBox $txtTenant -TypeCombo $srcType -SitePathBox $srcSitePath -EmailBox $srcEmail -LibraryBox $srcLibrary -SubPathBox $srcSubPath -SiteExampleLabel $srcSiteExample -LibraryExampleLabel $srcLibraryExample -SubfolderExampleLabel $srcSubExample
 })
 
 $dstLibrary.Add_TextChanged({
-    Update-LibrarySubfolderExamples -TenantBox $txtTenant -TypeCombo $dstType -SitePathBox $dstSitePath -LibraryBox $dstLibrary -SubPathBox $dstSubPath -LibraryExampleLabel $dstLibraryExample -SubfolderExampleLabel $dstSubExample
+    Update-EndpointUiState -TenantBox $txtTenant -TypeCombo $dstType -SitePathBox $dstSitePath -EmailBox $dstEmail -LibraryBox $dstLibrary -SubPathBox $dstSubPath -SiteExampleLabel $dstSiteExample -LibraryExampleLabel $dstLibraryExample -SubfolderExampleLabel $dstSubExample
 })
 
 $srcSubPath.Add_TextChanged({
-    Update-LibrarySubfolderExamples -TenantBox $txtTenant -TypeCombo $srcType -SitePathBox $srcSitePath -LibraryBox $srcLibrary -SubPathBox $srcSubPath -LibraryExampleLabel $srcLibraryExample -SubfolderExampleLabel $srcSubExample
+    Update-EndpointUiState -TenantBox $txtTenant -TypeCombo $srcType -SitePathBox $srcSitePath -EmailBox $srcEmail -LibraryBox $srcLibrary -SubPathBox $srcSubPath -SiteExampleLabel $srcSiteExample -LibraryExampleLabel $srcLibraryExample -SubfolderExampleLabel $srcSubExample
 })
 
 $dstSubPath.Add_TextChanged({
-    Update-LibrarySubfolderExamples -TenantBox $txtTenant -TypeCombo $dstType -SitePathBox $dstSitePath -LibraryBox $dstLibrary -SubPathBox $dstSubPath -LibraryExampleLabel $dstLibraryExample -SubfolderExampleLabel $dstSubExample
+    Update-EndpointUiState -TenantBox $txtTenant -TypeCombo $dstType -SitePathBox $dstSitePath -EmailBox $dstEmail -LibraryBox $dstLibrary -SubPathBox $dstSubPath -SiteExampleLabel $dstSiteExample -LibraryExampleLabel $dstLibraryExample -SubfolderExampleLabel $dstSubExample
 })
 
 $srcType.Add_SelectedIndexChanged({
     Update-TypeUi -TypeCombo $srcType -SitePathBox $srcSitePath -EmailBox $srcEmail -LibraryBox $srcLibrary
-    Update-SitePathExample -TenantBox $txtTenant -TypeCombo $srcType -SitePathBox $srcSitePath -ExampleLabel $srcSiteExample
-    Update-LibrarySubfolderExamples -TenantBox $txtTenant -TypeCombo $srcType -SitePathBox $srcSitePath -LibraryBox $srcLibrary -SubPathBox $srcSubPath -LibraryExampleLabel $srcLibraryExample -SubfolderExampleLabel $srcSubExample
+    Update-EndpointUiState -TenantBox $txtTenant -TypeCombo $srcType -SitePathBox $srcSitePath -EmailBox $srcEmail -LibraryBox $srcLibrary -SubPathBox $srcSubPath -SiteExampleLabel $srcSiteExample -LibraryExampleLabel $srcLibraryExample -SubfolderExampleLabel $srcSubExample
 })
 
 $dstType.Add_SelectedIndexChanged({
     Update-TypeUi -TypeCombo $dstType -SitePathBox $dstSitePath -EmailBox $dstEmail -LibraryBox $dstLibrary
-    Update-SitePathExample -TenantBox $txtTenant -TypeCombo $dstType -SitePathBox $dstSitePath -ExampleLabel $dstSiteExample
-    Update-LibrarySubfolderExamples -TenantBox $txtTenant -TypeCombo $dstType -SitePathBox $dstSitePath -LibraryBox $dstLibrary -SubPathBox $dstSubPath -LibraryExampleLabel $dstLibraryExample -SubfolderExampleLabel $dstSubExample
+    Update-EndpointUiState -TenantBox $txtTenant -TypeCombo $dstType -SitePathBox $dstSitePath -EmailBox $dstEmail -LibraryBox $dstLibrary -SubPathBox $dstSubPath -SiteExampleLabel $dstSiteExample -LibraryExampleLabel $dstLibraryExample -SubfolderExampleLabel $dstSubExample
 })
 
 $btnFetch.Add_Click({
@@ -1062,10 +1197,8 @@ $btnRun.Add_Click({
 Update-TypeUi -TypeCombo $srcType -SitePathBox $srcSitePath -EmailBox $srcEmail -LibraryBox $srcLibrary
 Update-TypeUi -TypeCombo $dstType -SitePathBox $dstSitePath -EmailBox $dstEmail -LibraryBox $dstLibrary
 Update-TenantExamples -TenantBox $txtTenant -ExampleLabel $lblTenantExample
-Update-SitePathExample -TenantBox $txtTenant -TypeCombo $srcType -SitePathBox $srcSitePath -ExampleLabel $srcSiteExample
-Update-SitePathExample -TenantBox $txtTenant -TypeCombo $dstType -SitePathBox $dstSitePath -ExampleLabel $dstSiteExample
-Update-LibrarySubfolderExamples -TenantBox $txtTenant -TypeCombo $srcType -SitePathBox $srcSitePath -LibraryBox $srcLibrary -SubPathBox $srcSubPath -LibraryExampleLabel $srcLibraryExample -SubfolderExampleLabel $srcSubExample
-Update-LibrarySubfolderExamples -TenantBox $txtTenant -TypeCombo $dstType -SitePathBox $dstSitePath -LibraryBox $dstLibrary -SubPathBox $dstSubPath -LibraryExampleLabel $dstLibraryExample -SubfolderExampleLabel $dstSubExample
+Update-EndpointUiState -TenantBox $txtTenant -TypeCombo $srcType -SitePathBox $srcSitePath -EmailBox $srcEmail -LibraryBox $srcLibrary -SubPathBox $srcSubPath -SiteExampleLabel $srcSiteExample -LibraryExampleLabel $srcLibraryExample -SubfolderExampleLabel $srcSubExample
+Update-EndpointUiState -TenantBox $txtTenant -TypeCombo $dstType -SitePathBox $dstSitePath -EmailBox $dstEmail -LibraryBox $dstLibrary -SubPathBox $dstSubPath -SiteExampleLabel $dstSiteExample -LibraryExampleLabel $dstLibraryExample -SubfolderExampleLabel $dstSubExample
 
 Write-Log "GUI started. Fill tenant + source/destination and click 'Get overview' first."
 [void]$form.ShowDialog()
