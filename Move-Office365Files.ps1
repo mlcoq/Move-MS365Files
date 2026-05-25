@@ -23,6 +23,7 @@ $script:FileLoggingEnabled = $false
 $script:LogTextBox = $null
 $script:LastOverview = $null
 $script:TenantConnection = $null
+$script:TenantSitePaths = @()
 $script:StateRoot = Join-Path $env:LOCALAPPDATA "MS365Mover"
 $script:TenantRegistrationPath = Join-Path $script:StateRoot "tenant-registration.json"
 
@@ -74,6 +75,68 @@ function Load-TenantRegistration {
 
 function Clear-TenantRegistration {
     Remove-Item -Path $script:TenantRegistrationPath -Force -ErrorAction SilentlyContinue
+}
+
+function Get-TenantSitePaths {
+    param([string]$Tenant)
+
+    $tenantClean = $Tenant.Trim().ToLowerInvariant()
+    if ([string]::IsNullOrWhiteSpace($tenantClean)) {
+        return @()
+    }
+
+    $adminUrl = "https://$tenantClean-admin.sharepoint.com"
+    $conn = $null
+
+    try {
+        $conn = Connect-PnPOnline -Url $adminUrl -Interactive -ReturnConnection -ErrorAction Stop
+        $sites = Get-PnPTenantSite -Connection $conn -ErrorAction Stop
+
+        $paths = @()
+        foreach ($site in $sites) {
+            if ([string]::IsNullOrWhiteSpace($site.Url)) {
+                continue
+            }
+
+            try {
+                $uri = [Uri]$site.Url
+                $path = $uri.AbsolutePath.Trim("/")
+                if ($path -match "^(?i)sites/") {
+                    $paths += $path
+                }
+            } catch {
+                continue
+            }
+        }
+
+        return ($paths | Sort-Object -Unique)
+    } finally {
+        if ($null -ne $conn) {
+            Disconnect-PnPOnline -Connection $conn -ErrorAction SilentlyContinue
+        }
+    }
+}
+
+function Update-SitePathDropdownItems {
+    param(
+        [System.Windows.Forms.ComboBox]$SourceSitePathBox,
+        [System.Windows.Forms.ComboBox]$DestinationSitePathBox,
+        [string[]]$SitePaths
+    )
+
+    $srcCurrent = $SourceSitePathBox.Text
+    $dstCurrent = $DestinationSitePathBox.Text
+
+    $SourceSitePathBox.Items.Clear()
+    $DestinationSitePathBox.Items.Clear()
+
+    if ($null -ne $SitePaths -and $SitePaths.Count -gt 0) {
+        [void]$SourceSitePathBox.Items.AddRange($SitePaths)
+        [void]$DestinationSitePathBox.Items.AddRange($SitePaths)
+    }
+
+    $SourceSitePathBox.Text = $srcCurrent
+    $DestinationSitePathBox.Text = $dstCurrent
 }
 
 function Ensure-RequiredPowerShell {
@@ -695,7 +758,7 @@ function Get-EndpointFromUi {
     param(
         [string]$Tenant,
         [System.Windows.Forms.ComboBox]$TypeCombo,
-        [System.Windows.Forms.TextBox]$SitePathBox,
+        [System.Windows.Forms.ComboBox]$SitePathBox,
         [System.Windows.Forms.TextBox]$LibraryBox,
         [System.Windows.Forms.TextBox]$SubPathBox,
         [System.Windows.Forms.TextBox]$EmailBox
@@ -714,7 +777,7 @@ function Get-EndpointFromUi {
 function Update-TypeUi {
     param(
         [System.Windows.Forms.ComboBox]$TypeCombo,
-        [System.Windows.Forms.TextBox]$SitePathBox,
+        [System.Windows.Forms.ComboBox]$SitePathBox,
         [System.Windows.Forms.TextBox]$EmailBox,
         [System.Windows.Forms.TextBox]$LibraryBox
     )
@@ -752,7 +815,7 @@ function Update-SitePathExample {
     param(
         [System.Windows.Forms.TextBox]$TenantBox,
         [System.Windows.Forms.ComboBox]$TypeCombo,
-        [System.Windows.Forms.TextBox]$SitePathBox,
+        [System.Windows.Forms.ComboBox]$SitePathBox,
         [System.Windows.Forms.Label]$ExampleLabel,
         [bool]$ShowExample
     )
@@ -785,7 +848,7 @@ function Update-LibrarySubfolderExamples {
     param(
         [System.Windows.Forms.TextBox]$TenantBox,
         [System.Windows.Forms.ComboBox]$TypeCombo,
-        [System.Windows.Forms.TextBox]$SitePathBox,
+        [System.Windows.Forms.ComboBox]$SitePathBox,
         [System.Windows.Forms.TextBox]$EmailBox,
         [System.Windows.Forms.TextBox]$LibraryBox,
         [System.Windows.Forms.TextBox]$SubPathBox,
@@ -866,7 +929,7 @@ function Update-EndpointUiState {
     param(
         [System.Windows.Forms.TextBox]$TenantBox,
         [System.Windows.Forms.ComboBox]$TypeCombo,
-        [System.Windows.Forms.TextBox]$SitePathBox,
+        [System.Windows.Forms.ComboBox]$SitePathBox,
         [System.Windows.Forms.TextBox]$EmailBox,
         [System.Windows.Forms.TextBox]$LibraryBox,
         [System.Windows.Forms.TextBox]$SubPathBox,
@@ -997,9 +1060,10 @@ $srcLblSite.Size = New-Object System.Drawing.Size(120, 25)
 $srcLblSite.Text = "Site path:"
 $grpSource.Controls.Add($srcLblSite)
 
-$srcSitePath = New-Object System.Windows.Forms.TextBox
+$srcSitePath = New-Object System.Windows.Forms.ComboBox
 $srcSitePath.Location = New-Object System.Drawing.Point(150, 63)
 $srcSitePath.Size = New-Object System.Drawing.Size(485, 25)
+$srcSitePath.DropDownStyle = "DropDown"
 $srcSitePath.Text = ""
 $grpSource.Controls.Add($srcSitePath)
 
@@ -1083,9 +1147,10 @@ $dstLblSite.Size = New-Object System.Drawing.Size(120, 25)
 $dstLblSite.Text = "Site path:"
 $grpDest.Controls.Add($dstLblSite)
 
-$dstSitePath = New-Object System.Windows.Forms.TextBox
+$dstSitePath = New-Object System.Windows.Forms.ComboBox
 $dstSitePath.Location = New-Object System.Drawing.Point(150, 63)
 $dstSitePath.Size = New-Object System.Drawing.Size(485, 25)
+$dstSitePath.DropDownStyle = "DropDown"
 $dstSitePath.Text = ""
 $grpDest.Controls.Add($dstSitePath)
 
@@ -1225,6 +1290,15 @@ $btnTenantConnect.Add_Click({
         $script:TenantConnection = Connect-PnPOnline -Url $tenantUrl -Interactive -ReturnConnection -ErrorAction Stop
         Write-Log "Connected to tenant: $tenantUrl" "SUCCESS"
 
+        try {
+            Write-Log "Loading SharePoint site paths from tenant..."
+            $script:TenantSitePaths = Get-TenantSitePaths -Tenant $tenant
+            Update-SitePathDropdownItems -SourceSitePathBox $srcSitePath -DestinationSitePathBox $dstSitePath -SitePaths $script:TenantSitePaths
+            Write-Log "Loaded $($script:TenantSitePaths.Count) site path(s)." "SUCCESS"
+        } catch {
+            Write-Log "Could not load tenant site paths. You can still type site path manually. $_" "WARN"
+        }
+
         if ($chkRememberTenant.Checked) {
             Save-TenantRegistration -Tenant $tenant -Days ([int]$numTenantDays.Value)
             Write-Log "Tenant registration saved for $([int]$numTenantDays.Value) day(s)." "SUCCESS"
@@ -1245,6 +1319,9 @@ $btnTenantDisconnect.Add_Click({
             $script:TenantConnection = $null
         }
 
+        $script:TenantSitePaths = @()
+        Update-SitePathDropdownItems -SourceSitePathBox $srcSitePath -DestinationSitePathBox $dstSitePath -SitePaths $script:TenantSitePaths
+
         Update-TenantConnectionUi -TenantBox $txtTenant -ConnectButton $btnTenantConnect -DisconnectButton $btnTenantDisconnect -TenantExampleLabel $lblTenantExample -IsConnected $false
         Write-Log "Disconnected from tenant." "SUCCESS"
     } catch {
@@ -1263,6 +1340,12 @@ $chkRememberTenant.Add_CheckedChanged({
 
 $txtTenant.Add_TextChanged({
     Update-TenantExamples -TenantBox $txtTenant -ExampleLabel $lblTenantExample
+
+    if ($null -eq $script:TenantConnection -and $script:TenantSitePaths.Count -gt 0) {
+        $script:TenantSitePaths = @()
+        Update-SitePathDropdownItems -SourceSitePathBox $srcSitePath -DestinationSitePathBox $dstSitePath -SitePaths $script:TenantSitePaths
+    }
+
     Update-EndpointUiState -TenantBox $txtTenant -TypeCombo $srcType -SitePathBox $srcSitePath -EmailBox $srcEmail -LibraryBox $srcLibrary -SubPathBox $srcSubPath -SiteExampleLabel $srcSiteExample -LibraryExampleLabel $srcLibraryExample -SubfolderExampleLabel $srcSubExample
     Update-EndpointUiState -TenantBox $txtTenant -TypeCombo $dstType -SitePathBox $dstSitePath -EmailBox $dstEmail -LibraryBox $dstLibrary -SubPathBox $dstSubPath -SiteExampleLabel $dstSiteExample -LibraryExampleLabel $dstLibraryExample -SubfolderExampleLabel $dstSubExample
 })
