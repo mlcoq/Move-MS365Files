@@ -18,7 +18,8 @@
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
-$script:LogFile = "$PSScriptRoot\MS365Mover_Log_$(Get-Date -Format 'yyyyMMdd_HHmmss').txt"
+$script:LogFile = $null
+$script:FileLoggingEnabled = $false
 $script:LogTextBox = $null
 $script:LastOverview = $null
 
@@ -58,7 +59,9 @@ function Write-Log {
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
     $line = "[$timestamp] [$Level] $Message"
     Write-Host $line
-    Add-Content -Path $script:LogFile -Value $line
+    if ($script:FileLoggingEnabled -and -not [string]::IsNullOrWhiteSpace($script:LogFile)) {
+        Add-Content -Path $script:LogFile -Value $line
+    }
 
     if ($null -ne $script:LogTextBox) {
         $script:LogTextBox.AppendText($line + [Environment]::NewLine)
@@ -339,6 +342,9 @@ function Invoke-Migration {
         [Parameter(Mandatory=$true)][bool]$WhatIfMode
     )
 
+    $script:LogFile = "$PSScriptRoot\MS365Mover_Log_$(Get-Date -Format 'yyyyMMdd_HHmmss').txt"
+    $script:FileLoggingEnabled = $true
+
     Ensure-PnPModule
 
     Write-Log "Starting migration"
@@ -488,6 +494,8 @@ function Invoke-Migration {
             Deleted = $counterRef.Value.Deleted
         }
     } finally {
+        $script:FileLoggingEnabled = $false
+
         if ($null -ne $srcConn) {
             Disconnect-PnPOnline -Connection $srcConn -ErrorAction SilentlyContinue
         }
