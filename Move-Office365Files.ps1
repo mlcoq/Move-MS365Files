@@ -27,6 +27,7 @@ $script:TenantSitePaths = @()
 $script:LibraryOptionsCache = @{}
 $script:StateRoot = Join-Path $env:LOCALAPPDATA "MS365Mover"
 $script:TenantRegistrationPath = Join-Path $script:StateRoot "tenant-registration.json"
+$script:PnPAppRegistrationPath = Join-Path $script:StateRoot "pnp-interactive-app.json"
 
 function Ensure-StateRoot {
     if (-not (Test-Path -Path $script:StateRoot)) {
@@ -76,6 +77,127 @@ function Load-TenantRegistration {
 
 function Clear-TenantRegistration {
     Remove-Item -Path $script:TenantRegistrationPath -Force -ErrorAction SilentlyContinue
+}
+
+function Load-PnPInteractiveAppRegistration {
+    if (-not (Test-Path -Path $script:PnPAppRegistrationPath)) {
+        return $null
+    }
+
+    try {
+        $data = Get-Content -Path $script:PnPAppRegistrationPath -Raw | ConvertFrom-Json
+        if ([string]::IsNullOrWhiteSpace($data.tenant) -or [string]::IsNullOrWhiteSpace($data.clientId) -or [string]::IsNullOrWhiteSpace($data.expiresUtc)) {
+            return $null
+        }
+
+        $expiresUtc = [DateTime]::Parse($data.expiresUtc).ToUniversalTime()
+        return [pscustomobject]@{
+            Tenant = [string]$data.tenant
+            ClientId = [string]$data.clientId
+            ExpiresUtc = $expiresUtc
+        }
+    } catch {
+        return $null
+    }
+}
+
+function Save-PnPInteractiveAppRegistration {
+    param(
+        [string]$Tenant,
+        [string]$ClientId,
+        [int]$Days = 30
+    )
+
+    Ensure-StateRoot
+
+    $safeDays = [Math]::Max(1, $Days)
+    $data = [pscustomobject]@{
+        tenant = $Tenant.Trim().ToLowerInvariant()
+        clientId = $ClientId
+        expiresUtc = (Get-Date).ToUniversalTime().AddDays($safeDays).ToString("o")
+    }
+
+    $data | ConvertTo-Json | Set-Content -Path $script:PnPAppRegistrationPath -Encoding UTF8
+}
+
+function Get-ValidPnPClientIdForTenant {
+    param([string]$Tenant)
+
+    $tenantKey = $Tenant.Trim().ToLowerInvariant()
+    $saved = Load-PnPInteractiveAppRegistration
+    if ($null -eq $saved) {
+        return $null
+    }
+
+    if ($saved.Tenant -ne $tenantKey) {
+        return $null
+    }
+
+    if ((Get-Date).ToUniversalTime() -ge $saved.ExpiresUtc) {
+        return $null
+    }
+
+    return $saved.ClientId
+}
+
+function Resolve-EntraTenantDomain {
+    param([string]$Tenant)
+
+    $t = $Tenant.Trim().ToLowerInvariant()
+    if ($t.Contains(".")) {
+        return $t
+    }
+
+    return "$t.onmicrosoft.com"
+}
+
+function Extract-ClientIdFromRegistrationResult {
+    param($RegistrationResult)
+
+    if ($null -ne $RegistrationResult) {
+        if ($null -ne $RegistrationResult.AppId -and -not [string]::IsNullOrWhiteSpace([string]$RegistrationResult.AppId)) {
+            return [string]$RegistrationResult.AppId
+        }
+        if ($null -ne $RegistrationResult.ClientId -and -not [string]::IsNullOrWhiteSpace([string]$RegistrationResult.ClientId)) {
+            return [string]$RegistrationResult.ClientId
+        }
+    }
+
+    $text = $RegistrationResult | Out-String
+    $guid = [regex]::Match($text, "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}")
+    if ($guid.Success) {
+        return $guid.Value
+    }
+
+    return $null
+}
+
+function Ensure-PnPInteractiveClientId {
+    param(
+        [string]$Tenant,
+        [int]$ValidityDays = 30
+    )
+
+    $existing = Get-ValidPnPClientIdForTenant -Tenant $Tenant
+    if (-not [string]::IsNullOrWhiteSpace($existing)) {
+        Save-PnPInteractiveAppRegistration -Tenant $Tenant -ClientId $existing -Days $ValidityDays
+        return $existing
+    }
+
+    $tenantDomain = Resolve-EntraTenantDomain -Tenant $Tenant
+    $appName = "MS365Mover-Interactive"
+    Write-Log "No valid PnP client id found. Registering Entra app '$appName' for tenant $tenantDomain..." "WARN"
+
+    $result = Register-PnPEntraIDAppForInteractiveLogin -ApplicationName $appName -Tenant $tenantDomain -ErrorAction Stop
+    $clientId = Extract-ClientIdFromRegistrationResult -RegistrationResult $result
+
+    if ([string]::IsNullOrWhiteSpace($clientId)) {
+        throw "Could not determine ClientId from Entra app registration output."
+    }
+
+    Save-PnPInteractiveAppRegistration -Tenant $Tenant -ClientId $clientId -Days $ValidityDays
+    Write-Log "Entra app ready. ClientId stored with $ValidityDays day validity." "SUCCESS"
+    return $clientId
 }
 
 function Get-TenantSitePaths {
@@ -1392,13 +1514,15 @@ $btnTenantConnect.Add_Click({
         $tenantUrl = "https://$tenant.sharepoint.com"
         Ensure-PnPModule
 
+        $clientId = Ensure-PnPInteractiveClientId -Tenant $tenant -ValidityDays 30
+
         if ($null -ne $script:TenantConnection) {
             Disconnect-PnPOnline -Connection $script:TenantConnection -ErrorAction SilentlyContinue
             $script:TenantConnection = $null
         }
 
         Write-Log "Connecting to tenant: $tenantUrl"
-        $script:TenantConnection = Connect-PnPOnline -Url $tenantUrl -Interactive -ReturnConnection -ErrorAction Stop
+        $script:TenantConnection = Connect-PnPOnline -Url $tenantUrl -Interactive -ClientId $clientId -ReturnConnection -ErrorAction Stop
         Write-Log "Connected to tenant: $tenantUrl" "SUCCESS"
 
         try {
