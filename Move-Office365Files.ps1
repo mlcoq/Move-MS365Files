@@ -576,7 +576,7 @@ function Update-SitePathExample {
     }
 
     if ([string]$TypeCombo.SelectedItem -eq "OneDrive") {
-        $ExampleLabel.Text = "Example URL: https://$tenant-my.sharepoint.com/personal/john_doe_contoso_com"
+        $ExampleLabel.Text = "https://$tenant-my.sharepoint.com/personal/john_doe_contoso_com"
         return
     }
 
@@ -586,7 +586,7 @@ function Update-SitePathExample {
         $enteredPath = $defaultPath
     }
 
-    $ExampleLabel.Text = "Example URL: https://$tenant.sharepoint.com/$enteredPath"
+    $ExampleLabel.Text = "https://$tenant.sharepoint.com/$enteredPath"
 }
 
 function Update-LibrarySubfolderExamples {
@@ -621,8 +621,8 @@ function Update-LibrarySubfolderExamples {
 
     if ([string]$TypeCombo.SelectedItem -eq "OneDrive") {
         $baseUrl = "https://$tenant-my.sharepoint.com/personal/john_doe_contoso_com"
-        $LibraryExampleLabel.Text = "Example URL: $baseUrl/$library"
-        $SubfolderExampleLabel.Text = "Example URL: $baseUrl/$library/$subPath"
+        $LibraryExampleLabel.Text = "$baseUrl/$library"
+        $SubfolderExampleLabel.Text = "$baseUrl/$library/$subPath"
         return
     }
 
@@ -632,8 +632,8 @@ function Update-LibrarySubfolderExamples {
     }
 
     $baseUrl = "https://$tenant.sharepoint.com/$sitePath"
-    $LibraryExampleLabel.Text = "Example URL: $baseUrl/$library"
-    $SubfolderExampleLabel.Text = "Example URL: $baseUrl/$library/$subPath"
+    $LibraryExampleLabel.Text = "$baseUrl/$library"
+    $SubfolderExampleLabel.Text = "$baseUrl/$library/$subPath"
 }
 
 # ---------------- GUI ----------------
@@ -700,7 +700,7 @@ $grpSource.Controls.Add($srcSitePath)
 $srcSiteExample = New-Object System.Windows.Forms.Label
 $srcSiteExample.Location = New-Object System.Drawing.Point(150, 88)
 $srcSiteExample.Size = New-Object System.Drawing.Size(280, 25)
-$srcSiteExample.Text = "Example URL:"
+$srcSiteExample.Text = "https://"
 $grpSource.Controls.Add($srcSiteExample)
 
 $srcLblEmail = New-Object System.Windows.Forms.Label
@@ -730,7 +730,7 @@ $grpSource.Controls.Add($srcLibrary)
 $srcLibraryExample = New-Object System.Windows.Forms.Label
 $srcLibraryExample.Location = New-Object System.Drawing.Point(150, 178)
 $srcLibraryExample.Size = New-Object System.Drawing.Size(280, 25)
-$srcLibraryExample.Text = "Example URL:"
+$srcLibraryExample.Text = "https://"
 $grpSource.Controls.Add($srcLibraryExample)
 
 $srcLblSub = New-Object System.Windows.Forms.Label
@@ -748,7 +748,7 @@ $grpSource.Controls.Add($srcSubPath)
 $srcSubExample = New-Object System.Windows.Forms.Label
 $srcSubExample.Location = New-Object System.Drawing.Point(150, 238)
 $srcSubExample.Size = New-Object System.Drawing.Size(280, 45)
-$srcSubExample.Text = "Example URL:"
+$srcSubExample.Text = "https://"
 $grpSource.Controls.Add($srcSubExample)
 
 $grpDest = New-Object System.Windows.Forms.GroupBox
@@ -786,7 +786,7 @@ $grpDest.Controls.Add($dstSitePath)
 $dstSiteExample = New-Object System.Windows.Forms.Label
 $dstSiteExample.Location = New-Object System.Drawing.Point(150, 88)
 $dstSiteExample.Size = New-Object System.Drawing.Size(280, 25)
-$dstSiteExample.Text = "Example URL:"
+$dstSiteExample.Text = "https://"
 $grpDest.Controls.Add($dstSiteExample)
 
 $dstLblEmail = New-Object System.Windows.Forms.Label
@@ -816,7 +816,7 @@ $grpDest.Controls.Add($dstLibrary)
 $dstLibraryExample = New-Object System.Windows.Forms.Label
 $dstLibraryExample.Location = New-Object System.Drawing.Point(150, 178)
 $dstLibraryExample.Size = New-Object System.Drawing.Size(280, 25)
-$dstLibraryExample.Text = "Example URL:"
+$dstLibraryExample.Text = "https://"
 $grpDest.Controls.Add($dstLibraryExample)
 
 $dstLblSub = New-Object System.Windows.Forms.Label
@@ -834,7 +834,7 @@ $grpDest.Controls.Add($dstSubPath)
 $dstSubExample = New-Object System.Windows.Forms.Label
 $dstSubExample.Location = New-Object System.Drawing.Point(150, 238)
 $dstSubExample.Size = New-Object System.Drawing.Size(280, 45)
-$dstSubExample.Text = "Example URL:"
+$dstSubExample.Text = "https://"
 $grpDest.Controls.Add($dstSubExample)
 
 $grpOptions = New-Object System.Windows.Forms.GroupBox
