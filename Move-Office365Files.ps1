@@ -25,6 +25,7 @@ $script:LastOverview = $null
 $script:TenantConnection = $null
 $script:TenantSitePaths = @()
 $script:LibraryOptionsCache = @{}
+$script:SubfolderOptionsCache = @{}
 $script:StateRoot = Join-Path $env:LOCALAPPDATA "MS365Mover"
 $script:TenantRegistrationPath = Join-Path $script:StateRoot "tenant-registration.json"
 $script:PnPAppRegistrationPath = Join-Path $script:StateRoot "pnp-interactive-app.json"
@@ -282,6 +283,24 @@ function Update-LibraryDropdownItems {
     }
 }
 
+function Update-SubfolderDropdownItems {
+    param(
+        [System.Windows.Forms.ComboBox]$SubfolderBox,
+        [string[]]$Subfolders
+    )
+
+    $current = $SubfolderBox.Text
+    $SubfolderBox.Items.Clear()
+
+    if ($null -ne $Subfolders -and $Subfolders.Count -gt 0) {
+        [void]$SubfolderBox.Items.AddRange($Subfolders)
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($current)) {
+        $SubfolderBox.Text = $current
+    }
+}
+
 function Resolve-EndpointSiteUrl {
     param(
         [string]$Tenant,
@@ -340,6 +359,50 @@ function Get-AccessibleLibraries {
     }
 }
 
+function Get-AccessibleSubfolders {
+    param(
+        [string]$SiteUrl,
+        [string]$Library
+    )
+
+    $cacheKey = "$SiteUrl|$Library"
+    if ($script:SubfolderOptionsCache.ContainsKey($cacheKey)) {
+        return $script:SubfolderOptionsCache[$cacheKey]
+    }
+
+    $conn = $null
+    try {
+        $conn = Connect-PnPOnline -Url $SiteUrl -Interactive -ReturnConnection -ErrorAction Stop
+        $result = New-Object System.Collections.Generic.List[string]
+
+        function Read-FoldersRecursive {
+            param(
+                [string]$FolderRel,
+                [string]$Prefix,
+                $Connection,
+                [System.Collections.Generic.List[string]]$Collector
+            )
+
+            $folders = Get-PnPFolderItem -FolderSiteRelativeUrl $FolderRel -ItemType Folder -Connection $Connection -ErrorAction Stop
+            foreach ($folder in $folders) {
+                $relative = if ([string]::IsNullOrWhiteSpace($Prefix)) { $folder.Name } else { "$Prefix/$($folder.Name)" }
+                $Collector.Add($relative)
+                Read-FoldersRecursive -FolderRel "$FolderRel/$($folder.Name)" -Prefix $relative -Connection $Connection -Collector $Collector
+            }
+        }
+
+        Read-FoldersRecursive -FolderRel $Library -Prefix "" -Connection $conn -Collector $result
+
+        $values = @($result | Sort-Object -Unique)
+        $script:SubfolderOptionsCache[$cacheKey] = $values
+        return $values
+    } finally {
+        if ($null -ne $conn) {
+            Disconnect-PnPOnline -Connection $conn -ErrorAction SilentlyContinue
+        }
+    }
+}
+
 function Refresh-LibrariesForEndpoint {
     param(
         [string]$Tenant,
@@ -367,6 +430,38 @@ function Refresh-LibrariesForEndpoint {
     } catch {
         Update-LibraryDropdownItems -LibraryBox $LibraryBox -Libraries @()
         Set-ExampleLabelState -Label $LibraryExampleLabel -Text "${RoleLabel}: cannot load libraries - $_" -IsError $true -Show $true
+    }
+}
+
+function Refresh-SubfoldersForEndpoint {
+    param(
+        [string]$Tenant,
+        [System.Windows.Forms.ComboBox]$TypeCombo,
+        [System.Windows.Forms.ComboBox]$SitePathBox,
+        [System.Windows.Forms.TextBox]$EmailBox,
+        [System.Windows.Forms.ComboBox]$LibraryBox,
+        [System.Windows.Forms.ComboBox]$SubfolderBox,
+        [System.Windows.Forms.Label]$SubfolderExampleLabel,
+        [string]$RoleLabel
+    )
+
+    $library = $LibraryBox.Text.Trim().Trim("/")
+    if ([string]::IsNullOrWhiteSpace($Tenant) -or [string]::IsNullOrWhiteSpace($library)) {
+        Update-SubfolderDropdownItems -SubfolderBox $SubfolderBox -Subfolders @()
+        return
+    }
+
+    try {
+        $siteUrl = Resolve-EndpointSiteUrl -Tenant $Tenant -Type ([string]$TypeCombo.SelectedItem) -SitePath $SitePathBox.Text -OneDriveEmail $EmailBox.Text
+        $subfolders = Get-AccessibleSubfolders -SiteUrl $siteUrl -Library $library
+
+        Update-SubfolderDropdownItems -SubfolderBox $SubfolderBox -Subfolders $subfolders
+        if ($subfolders.Count -eq 0) {
+            Set-ExampleLabelState -Label $SubfolderExampleLabel -Text "${RoleLabel}: no subfolders found under '$library'" -IsError $true -Show $true
+        }
+    } catch {
+        Update-SubfolderDropdownItems -SubfolderBox $SubfolderBox -Subfolders @()
+        Set-ExampleLabelState -Label $SubfolderExampleLabel -Text "${RoleLabel}: cannot load subfolders - $_" -IsError $true -Show $true
     }
 }
 
@@ -991,7 +1086,7 @@ function Get-EndpointFromUi {
         [System.Windows.Forms.ComboBox]$TypeCombo,
         [System.Windows.Forms.ComboBox]$SitePathBox,
         [System.Windows.Forms.ComboBox]$LibraryBox,
-        [System.Windows.Forms.TextBox]$SubPathBox,
+        [System.Windows.Forms.ComboBox]$SubPathBox,
         [System.Windows.Forms.TextBox]$EmailBox
     )
 
@@ -1082,7 +1177,7 @@ function Update-LibrarySubfolderExamples {
         [System.Windows.Forms.ComboBox]$SitePathBox,
         [System.Windows.Forms.TextBox]$EmailBox,
         [System.Windows.Forms.ComboBox]$LibraryBox,
-        [System.Windows.Forms.TextBox]$SubPathBox,
+        [System.Windows.Forms.ComboBox]$SubPathBox,
         [System.Windows.Forms.Label]$LibraryExampleLabel,
         [System.Windows.Forms.Label]$SubfolderExampleLabel,
         [bool]$ShowLibraryExample,
@@ -1163,7 +1258,7 @@ function Update-EndpointUiState {
         [System.Windows.Forms.ComboBox]$SitePathBox,
         [System.Windows.Forms.TextBox]$EmailBox,
         [System.Windows.Forms.ComboBox]$LibraryBox,
-        [System.Windows.Forms.TextBox]$SubPathBox,
+        [System.Windows.Forms.ComboBox]$SubPathBox,
         [System.Windows.Forms.Label]$SiteExampleLabel,
         [System.Windows.Forms.Label]$LibraryExampleLabel,
         [System.Windows.Forms.Label]$SubfolderExampleLabel
@@ -1341,9 +1436,10 @@ $srcLblSub.Size = New-Object System.Drawing.Size(120, 25)
 $srcLblSub.Text = "Subfolder (opt.):"
 $grpSource.Controls.Add($srcLblSub)
 
-$srcSubPath = New-Object System.Windows.Forms.TextBox
+$srcSubPath = New-Object System.Windows.Forms.ComboBox
 $srcSubPath.Location = New-Object System.Drawing.Point(150, 213)
 $srcSubPath.Size = New-Object System.Drawing.Size(485, 25)
+$srcSubPath.DropDownStyle = "DropDown"
 $srcSubPath.Text = ""
 $grpSource.Controls.Add($srcSubPath)
 
@@ -1429,9 +1525,10 @@ $dstLblSub.Size = New-Object System.Drawing.Size(120, 25)
 $dstLblSub.Text = "Subfolder (opt.):"
 $grpDest.Controls.Add($dstLblSub)
 
-$dstSubPath = New-Object System.Windows.Forms.TextBox
+$dstSubPath = New-Object System.Windows.Forms.ComboBox
 $dstSubPath.Location = New-Object System.Drawing.Point(150, 213)
 $dstSubPath.Size = New-Object System.Drawing.Size(485, 25)
+$dstSubPath.DropDownStyle = "DropDown"
 $dstSubPath.Text = ""
 $grpDest.Controls.Add($dstSubPath)
 
@@ -1536,6 +1633,8 @@ $btnTenantConnect.Add_Click({
 
         Refresh-LibrariesForEndpoint -Tenant $tenant -TypeCombo $srcType -SitePathBox $srcSitePath -EmailBox $srcEmail -LibraryBox $srcLibrary -LibraryExampleLabel $srcLibraryExample -RoleLabel "Source"
         Refresh-LibrariesForEndpoint -Tenant $tenant -TypeCombo $dstType -SitePathBox $dstSitePath -EmailBox $dstEmail -LibraryBox $dstLibrary -LibraryExampleLabel $dstLibraryExample -RoleLabel "Destination"
+        Refresh-SubfoldersForEndpoint -Tenant $tenant -TypeCombo $srcType -SitePathBox $srcSitePath -EmailBox $srcEmail -LibraryBox $srcLibrary -SubfolderBox $srcSubPath -SubfolderExampleLabel $srcSubExample -RoleLabel "Source"
+        Refresh-SubfoldersForEndpoint -Tenant $tenant -TypeCombo $dstType -SitePathBox $dstSitePath -EmailBox $dstEmail -LibraryBox $dstLibrary -SubfolderBox $dstSubPath -SubfolderExampleLabel $dstSubExample -RoleLabel "Destination"
 
         if ($chkRememberTenant.Checked) {
             Save-TenantRegistration -Tenant $tenant -Days ([int]$numTenantDays.Value)
@@ -1559,9 +1658,12 @@ $btnTenantDisconnect.Add_Click({
 
         $script:TenantSitePaths = @()
         $script:LibraryOptionsCache = @{}
+        $script:SubfolderOptionsCache = @{}
         Update-SitePathDropdownItems -SourceSitePathBox $srcSitePath -DestinationSitePathBox $dstSitePath -SitePaths $script:TenantSitePaths
         Update-LibraryDropdownItems -LibraryBox $srcLibrary -Libraries @()
         Update-LibraryDropdownItems -LibraryBox $dstLibrary -Libraries @()
+        Update-SubfolderDropdownItems -SubfolderBox $srcSubPath -Subfolders @()
+        Update-SubfolderDropdownItems -SubfolderBox $dstSubPath -Subfolders @()
 
         Update-TenantConnectionUi -TenantBox $txtTenant -ConnectButton $btnTenantConnect -DisconnectButton $btnTenantDisconnect -TenantExampleLabel $lblTenantExample -IsConnected $false
         Write-Log "Disconnected from tenant." "SUCCESS"
@@ -1593,29 +1695,35 @@ $txtTenant.Add_TextChanged({
 
 $srcSitePath.Add_TextChanged({
     Refresh-LibrariesForEndpoint -Tenant $txtTenant.Text.Trim() -TypeCombo $srcType -SitePathBox $srcSitePath -EmailBox $srcEmail -LibraryBox $srcLibrary -LibraryExampleLabel $srcLibraryExample -RoleLabel "Source"
+    Refresh-SubfoldersForEndpoint -Tenant $txtTenant.Text.Trim() -TypeCombo $srcType -SitePathBox $srcSitePath -EmailBox $srcEmail -LibraryBox $srcLibrary -SubfolderBox $srcSubPath -SubfolderExampleLabel $srcSubExample -RoleLabel "Source"
     Update-EndpointUiState -TenantBox $txtTenant -TypeCombo $srcType -SitePathBox $srcSitePath -EmailBox $srcEmail -LibraryBox $srcLibrary -SubPathBox $srcSubPath -SiteExampleLabel $srcSiteExample -LibraryExampleLabel $srcLibraryExample -SubfolderExampleLabel $srcSubExample
 })
 
 $dstSitePath.Add_TextChanged({
     Refresh-LibrariesForEndpoint -Tenant $txtTenant.Text.Trim() -TypeCombo $dstType -SitePathBox $dstSitePath -EmailBox $dstEmail -LibraryBox $dstLibrary -LibraryExampleLabel $dstLibraryExample -RoleLabel "Destination"
+    Refresh-SubfoldersForEndpoint -Tenant $txtTenant.Text.Trim() -TypeCombo $dstType -SitePathBox $dstSitePath -EmailBox $dstEmail -LibraryBox $dstLibrary -SubfolderBox $dstSubPath -SubfolderExampleLabel $dstSubExample -RoleLabel "Destination"
     Update-EndpointUiState -TenantBox $txtTenant -TypeCombo $dstType -SitePathBox $dstSitePath -EmailBox $dstEmail -LibraryBox $dstLibrary -SubPathBox $dstSubPath -SiteExampleLabel $dstSiteExample -LibraryExampleLabel $dstLibraryExample -SubfolderExampleLabel $dstSubExample
 })
 
 $srcEmail.Add_TextChanged({
     Refresh-LibrariesForEndpoint -Tenant $txtTenant.Text.Trim() -TypeCombo $srcType -SitePathBox $srcSitePath -EmailBox $srcEmail -LibraryBox $srcLibrary -LibraryExampleLabel $srcLibraryExample -RoleLabel "Source"
+    Refresh-SubfoldersForEndpoint -Tenant $txtTenant.Text.Trim() -TypeCombo $srcType -SitePathBox $srcSitePath -EmailBox $srcEmail -LibraryBox $srcLibrary -SubfolderBox $srcSubPath -SubfolderExampleLabel $srcSubExample -RoleLabel "Source"
     Update-EndpointUiState -TenantBox $txtTenant -TypeCombo $srcType -SitePathBox $srcSitePath -EmailBox $srcEmail -LibraryBox $srcLibrary -SubPathBox $srcSubPath -SiteExampleLabel $srcSiteExample -LibraryExampleLabel $srcLibraryExample -SubfolderExampleLabel $srcSubExample
 })
 
 $dstEmail.Add_TextChanged({
     Refresh-LibrariesForEndpoint -Tenant $txtTenant.Text.Trim() -TypeCombo $dstType -SitePathBox $dstSitePath -EmailBox $dstEmail -LibraryBox $dstLibrary -LibraryExampleLabel $dstLibraryExample -RoleLabel "Destination"
+    Refresh-SubfoldersForEndpoint -Tenant $txtTenant.Text.Trim() -TypeCombo $dstType -SitePathBox $dstSitePath -EmailBox $dstEmail -LibraryBox $dstLibrary -SubfolderBox $dstSubPath -SubfolderExampleLabel $dstSubExample -RoleLabel "Destination"
     Update-EndpointUiState -TenantBox $txtTenant -TypeCombo $dstType -SitePathBox $dstSitePath -EmailBox $dstEmail -LibraryBox $dstLibrary -SubPathBox $dstSubPath -SiteExampleLabel $dstSiteExample -LibraryExampleLabel $dstLibraryExample -SubfolderExampleLabel $dstSubExample
 })
 
 $srcLibrary.Add_TextChanged({
+    Refresh-SubfoldersForEndpoint -Tenant $txtTenant.Text.Trim() -TypeCombo $srcType -SitePathBox $srcSitePath -EmailBox $srcEmail -LibraryBox $srcLibrary -SubfolderBox $srcSubPath -SubfolderExampleLabel $srcSubExample -RoleLabel "Source"
     Update-EndpointUiState -TenantBox $txtTenant -TypeCombo $srcType -SitePathBox $srcSitePath -EmailBox $srcEmail -LibraryBox $srcLibrary -SubPathBox $srcSubPath -SiteExampleLabel $srcSiteExample -LibraryExampleLabel $srcLibraryExample -SubfolderExampleLabel $srcSubExample
 })
 
 $dstLibrary.Add_TextChanged({
+    Refresh-SubfoldersForEndpoint -Tenant $txtTenant.Text.Trim() -TypeCombo $dstType -SitePathBox $dstSitePath -EmailBox $dstEmail -LibraryBox $dstLibrary -SubfolderBox $dstSubPath -SubfolderExampleLabel $dstSubExample -RoleLabel "Destination"
     Update-EndpointUiState -TenantBox $txtTenant -TypeCombo $dstType -SitePathBox $dstSitePath -EmailBox $dstEmail -LibraryBox $dstLibrary -SubPathBox $dstSubPath -SiteExampleLabel $dstSiteExample -LibraryExampleLabel $dstLibraryExample -SubfolderExampleLabel $dstSubExample
 })
 
@@ -1630,12 +1738,14 @@ $dstSubPath.Add_TextChanged({
 $srcType.Add_SelectedIndexChanged({
     Update-TypeUi -TypeCombo $srcType -SitePathBox $srcSitePath -EmailBox $srcEmail -LibraryBox $srcLibrary
     Refresh-LibrariesForEndpoint -Tenant $txtTenant.Text.Trim() -TypeCombo $srcType -SitePathBox $srcSitePath -EmailBox $srcEmail -LibraryBox $srcLibrary -LibraryExampleLabel $srcLibraryExample -RoleLabel "Source"
+    Refresh-SubfoldersForEndpoint -Tenant $txtTenant.Text.Trim() -TypeCombo $srcType -SitePathBox $srcSitePath -EmailBox $srcEmail -LibraryBox $srcLibrary -SubfolderBox $srcSubPath -SubfolderExampleLabel $srcSubExample -RoleLabel "Source"
     Update-EndpointUiState -TenantBox $txtTenant -TypeCombo $srcType -SitePathBox $srcSitePath -EmailBox $srcEmail -LibraryBox $srcLibrary -SubPathBox $srcSubPath -SiteExampleLabel $srcSiteExample -LibraryExampleLabel $srcLibraryExample -SubfolderExampleLabel $srcSubExample
 })
 
 $dstType.Add_SelectedIndexChanged({
     Update-TypeUi -TypeCombo $dstType -SitePathBox $dstSitePath -EmailBox $dstEmail -LibraryBox $dstLibrary
     Refresh-LibrariesForEndpoint -Tenant $txtTenant.Text.Trim() -TypeCombo $dstType -SitePathBox $dstSitePath -EmailBox $dstEmail -LibraryBox $dstLibrary -LibraryExampleLabel $dstLibraryExample -RoleLabel "Destination"
+    Refresh-SubfoldersForEndpoint -Tenant $txtTenant.Text.Trim() -TypeCombo $dstType -SitePathBox $dstSitePath -EmailBox $dstEmail -LibraryBox $dstLibrary -SubfolderBox $dstSubPath -SubfolderExampleLabel $dstSubExample -RoleLabel "Destination"
     Update-EndpointUiState -TenantBox $txtTenant -TypeCombo $dstType -SitePathBox $dstSitePath -EmailBox $dstEmail -LibraryBox $dstLibrary -SubPathBox $dstSubPath -SiteExampleLabel $dstSiteExample -LibraryExampleLabel $dstLibraryExample -SubfolderExampleLabel $dstSubExample
 })
 
