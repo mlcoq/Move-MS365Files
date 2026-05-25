@@ -73,13 +73,57 @@ function Write-Log {
 }
 
 function Ensure-PnPModule {
-    if (-not (Get-Module -ListAvailable -Name "PnP.PowerShell")) {
-        Write-Log "PnP.PowerShell not found. Installing..." "WARN"
-        Install-Module PnP.PowerShell -Scope CurrentUser -Force -AllowClobber
+    $localModuleRoot = Join-Path $env:LOCALAPPDATA "MS365Mover\Modules"
+
+    function Import-LocalPnPModule {
+        param([string]$ModuleRoot)
+
+        $manifest = Get-ChildItem -Path (Join-Path $ModuleRoot "PnP.PowerShell\*\PnP.PowerShell.psd1") -ErrorAction SilentlyContinue |
+            Sort-Object FullName -Descending |
+            Select-Object -First 1
+
+        if ($null -eq $manifest) {
+            return $false
+        }
+
+        Import-Module $manifest.FullName -Force -ErrorAction Stop
+        return $true
     }
 
-    Import-Module PnP.PowerShell -ErrorAction Stop
-    Write-Log "PnP.PowerShell module loaded." "SUCCESS"
+    function Ensure-LocalPnPModuleInstalled {
+        param([string]$ModuleRoot)
+
+        if (-not (Test-Path -Path $ModuleRoot)) {
+            New-Item -Path $ModuleRoot -ItemType Directory -Force | Out-Null
+        }
+
+        Save-Module -Name PnP.PowerShell -Path $ModuleRoot -Force -ErrorAction Stop
+    }
+
+    if (-not (Get-Module -ListAvailable -Name "PnP.PowerShell")) {
+        Write-Log "PnP.PowerShell not found. Installing..." "WARN"
+        Ensure-LocalPnPModuleInstalled -ModuleRoot $localModuleRoot
+    }
+
+    try {
+        Import-Module PnP.PowerShell -ErrorAction Stop
+        Write-Log "PnP.PowerShell module loaded." "SUCCESS"
+        return
+    } catch {
+        Write-Log "Default module import failed, trying local cache: $_" "WARN"
+    }
+
+    try {
+        if (-not (Import-LocalPnPModule -ModuleRoot $localModuleRoot)) {
+            Write-Log "Local PnP cache not found. Downloading module to local cache..." "WARN"
+            Ensure-LocalPnPModuleInstalled -ModuleRoot $localModuleRoot
+            [void](Import-LocalPnPModule -ModuleRoot $localModuleRoot)
+        }
+
+        Write-Log "PnP.PowerShell module loaded from local cache." "SUCCESS"
+    } catch {
+        throw "Could not load PnP.PowerShell. If OneDrive is redirecting your PowerShell modules, keep OneDrive running or use the local module cache fallback. Details: $_"
+    }
 }
 
 function Join-UrlPath {
