@@ -22,6 +22,7 @@ $script:LogFile = $null
 $script:FileLoggingEnabled = $false
 $script:LogTextBox = $null
 $script:LastOverview = $null
+$script:TenantConnection = $null
 
 function Ensure-RequiredPowerShell {
     $required = [version]"7.4.0"
@@ -808,15 +809,21 @@ $txtTenant.Location = New-Object System.Drawing.Point(250, 18)
 $txtTenant.Size = New-Object System.Drawing.Size(260, 25)
 $form.Controls.Add($txtTenant)
 
+$btnTenantConnect = New-Object System.Windows.Forms.Button
+$btnTenantConnect.Location = New-Object System.Drawing.Point(250, 48)
+$btnTenantConnect.Size = New-Object System.Drawing.Size(120, 28)
+$btnTenantConnect.Text = "Connect"
+$form.Controls.Add($btnTenantConnect)
+
 $lblTenantExample = New-Object System.Windows.Forms.Label
-$lblTenantExample.Location = New-Object System.Drawing.Point(20, 48)
+$lblTenantExample.Location = New-Object System.Drawing.Point(20, 78)
 $lblTenantExample.Size = New-Object System.Drawing.Size(930, 30)
 $lblTenantExample.Text = "https://<tenant>.sharepoint.com"
 $form.Controls.Add($lblTenantExample)
 
 $grpSource = New-Object System.Windows.Forms.GroupBox
 $grpSource.Text = "Source"
-$grpSource.Location = New-Object System.Drawing.Point(20, 85)
+$grpSource.Location = New-Object System.Drawing.Point(20, 115)
 $grpSource.Size = New-Object System.Drawing.Size(675, 295)
 $form.Controls.Add($grpSource)
 
@@ -902,7 +909,7 @@ $grpSource.Controls.Add($srcSubExample)
 
 $grpDest = New-Object System.Windows.Forms.GroupBox
 $grpDest.Text = "Destination"
-$grpDest.Location = New-Object System.Drawing.Point(20, 390)
+$grpDest.Location = New-Object System.Drawing.Point(20, 420)
 $grpDest.Size = New-Object System.Drawing.Size(675, 295)
 $form.Controls.Add($grpDest)
 
@@ -988,7 +995,7 @@ $grpDest.Controls.Add($dstSubExample)
 
 $grpOptions = New-Object System.Windows.Forms.GroupBox
 $grpOptions.Text = "Options"
-$grpOptions.Location = New-Object System.Drawing.Point(20, 700)
+$grpOptions.Location = New-Object System.Drawing.Point(20, 730)
 $grpOptions.Size = New-Object System.Drawing.Size(675, 90)
 $form.Controls.Add($grpOptions)
 
@@ -1031,7 +1038,7 @@ $btnRun.Text = "Start"
 $grpOptions.Controls.Add($btnRun)
 
 $txtSummary = New-Object System.Windows.Forms.TextBox
-$txtSummary.Location = New-Object System.Drawing.Point(20, 800)
+$txtSummary.Location = New-Object System.Drawing.Point(20, 830)
 $txtSummary.Size = New-Object System.Drawing.Size(675, 50)
 $txtSummary.Multiline = $true
 $txtSummary.ReadOnly = $true
@@ -1039,7 +1046,7 @@ $txtSummary.BackColor = [System.Drawing.Color]::White
 $form.Controls.Add($txtSummary)
 
 $txtLog = New-Object System.Windows.Forms.TextBox
-$txtLog.Location = New-Object System.Drawing.Point(20, 860)
+$txtLog.Location = New-Object System.Drawing.Point(20, 890)
 $txtLog.Size = New-Object System.Drawing.Size(675, 160)
 $txtLog.Multiline = $true
 $txtLog.ScrollBars = "Vertical"
@@ -1048,6 +1055,31 @@ $txtLog.BackColor = [System.Drawing.Color]::White
 $form.Controls.Add($txtLog)
 
 $script:LogTextBox = $txtLog
+
+$btnTenantConnect.Add_Click({
+    try {
+        $tenant = $txtTenant.Text.Trim().ToLowerInvariant()
+        if ([string]::IsNullOrWhiteSpace($tenant)) {
+            throw "Tenant is required before connecting."
+        }
+
+        $tenantUrl = "https://$tenant.sharepoint.com"
+        Ensure-PnPModule
+
+        if ($null -ne $script:TenantConnection) {
+            Disconnect-PnPOnline -Connection $script:TenantConnection -ErrorAction SilentlyContinue
+            $script:TenantConnection = $null
+        }
+
+        Write-Log "Connecting to tenant: $tenantUrl"
+        $script:TenantConnection = Connect-PnPOnline -Url $tenantUrl -Interactive -ReturnConnection -ErrorAction Stop
+        Write-Log "Connected to tenant: $tenantUrl" "SUCCESS"
+        [System.Windows.Forms.MessageBox]::Show("Connected to $tenantUrl", "Connected", "OK", "Information") | Out-Null
+    } catch {
+        Write-Log "Tenant connect failed: $_" "ERROR"
+        [System.Windows.Forms.MessageBox]::Show("Tenant connect failed: $_", "Error", "OK", "Error") | Out-Null
+    }
+})
 
 $txtTenant.Add_TextChanged({
     Update-TenantExamples -TenantBox $txtTenant -ExampleLabel $lblTenantExample
@@ -1095,6 +1127,13 @@ $srcType.Add_SelectedIndexChanged({
 $dstType.Add_SelectedIndexChanged({
     Update-TypeUi -TypeCombo $dstType -SitePathBox $dstSitePath -EmailBox $dstEmail -LibraryBox $dstLibrary
     Update-EndpointUiState -TenantBox $txtTenant -TypeCombo $dstType -SitePathBox $dstSitePath -EmailBox $dstEmail -LibraryBox $dstLibrary -SubPathBox $dstSubPath -SiteExampleLabel $dstSiteExample -LibraryExampleLabel $dstLibraryExample -SubfolderExampleLabel $dstSubExample
+})
+
+$form.Add_FormClosed({
+    if ($null -ne $script:TenantConnection) {
+        Disconnect-PnPOnline -Connection $script:TenantConnection -ErrorAction SilentlyContinue
+        $script:TenantConnection = $null
+    }
 })
 
 $btnFetch.Add_Click({
