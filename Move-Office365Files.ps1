@@ -562,14 +562,14 @@ function Update-SitePathExample {
         [System.Windows.Forms.Label]$ExampleLabel
     )
 
-    if ([string]$TypeCombo.SelectedItem -eq "OneDrive") {
-        $ExampleLabel.Text = "Site path is not used for OneDrive."
-        return
-    }
-
     $tenant = $TenantBox.Text.Trim().ToLowerInvariant()
     if ([string]::IsNullOrWhiteSpace($tenant)) {
         $tenant = "<tenant>"
+    }
+
+    if ([string]$TypeCombo.SelectedItem -eq "OneDrive") {
+        $ExampleLabel.Text = "Example URL: https://$tenant-my.sharepoint.com/personal/john_doe_contoso_com"
+        return
     }
 
     $enteredPath = $SitePathBox.Text.Trim().Trim("/")
@@ -578,7 +578,54 @@ function Update-SitePathExample {
         $enteredPath = $defaultPath
     }
 
-    $ExampleLabel.Text = "Format: /sites/... (enter: sites/TeamName). Example URL: https://$tenant.sharepoint.com/$enteredPath"
+    $ExampleLabel.Text = "Example URL: https://$tenant.sharepoint.com/$enteredPath"
+}
+
+function Update-LibrarySubfolderExamples {
+    param(
+        [System.Windows.Forms.TextBox]$TenantBox,
+        [System.Windows.Forms.ComboBox]$TypeCombo,
+        [System.Windows.Forms.TextBox]$SitePathBox,
+        [System.Windows.Forms.TextBox]$LibraryBox,
+        [System.Windows.Forms.TextBox]$SubPathBox,
+        [System.Windows.Forms.Label]$LibraryExampleLabel,
+        [System.Windows.Forms.Label]$SubfolderExampleLabel
+    )
+
+    $tenant = $TenantBox.Text.Trim().ToLowerInvariant()
+    if ([string]::IsNullOrWhiteSpace($tenant)) {
+        $tenant = "<tenant>"
+    }
+
+    $library = $LibraryBox.Text.Trim().Trim("/")
+    if ([string]::IsNullOrWhiteSpace($library)) {
+        if ([string]$TypeCombo.SelectedItem -eq "OneDrive") {
+            $library = "Documents"
+        } else {
+            $library = "Shared Documents"
+        }
+    }
+
+    $subPath = $SubPathBox.Text.Trim().Trim("/")
+    if ([string]::IsNullOrWhiteSpace($subPath)) {
+        $subPath = "ProjectFolder"
+    }
+
+    if ([string]$TypeCombo.SelectedItem -eq "OneDrive") {
+        $baseUrl = "https://$tenant-my.sharepoint.com/personal/john_doe_contoso_com"
+        $LibraryExampleLabel.Text = "Example URL: $baseUrl/$library"
+        $SubfolderExampleLabel.Text = "Example URL: $baseUrl/$library/$subPath"
+        return
+    }
+
+    $sitePath = $SitePathBox.Text.Trim().Trim("/")
+    if ([string]::IsNullOrWhiteSpace($sitePath)) {
+        $sitePath = "sites/Finance"
+    }
+
+    $baseUrl = "https://$tenant.sharepoint.com/$sitePath"
+    $LibraryExampleLabel.Text = "Example URL: $baseUrl/$library"
+    $SubfolderExampleLabel.Text = "Example URL: $baseUrl/$library/$subPath"
 }
 
 # ---------------- GUI ----------------
@@ -613,7 +660,7 @@ $form.Controls.Add($lblTenantExample)
 $grpSource = New-Object System.Windows.Forms.GroupBox
 $grpSource.Text = "Source"
 $grpSource.Location = New-Object System.Drawing.Point(20, 85)
-$grpSource.Size = New-Object System.Drawing.Size(450, 270)
+$grpSource.Size = New-Object System.Drawing.Size(450, 295)
 $form.Controls.Add($grpSource)
 
 $srcLblType = New-Object System.Windows.Forms.Label
@@ -645,7 +692,7 @@ $grpSource.Controls.Add($srcSitePath)
 $srcSiteExample = New-Object System.Windows.Forms.Label
 $srcSiteExample.Location = New-Object System.Drawing.Point(150, 88)
 $srcSiteExample.Size = New-Object System.Drawing.Size(280, 25)
-$srcSiteExample.Text = "Format: /sites/..."
+$srcSiteExample.Text = "Example URL:"
 $grpSource.Controls.Add($srcSiteExample)
 
 $srcLblEmail = New-Object System.Windows.Forms.Label
@@ -672,28 +719,34 @@ $srcLibrary.Size = New-Object System.Drawing.Size(260, 25)
 $srcLibrary.Text = "Shared Documents"
 $grpSource.Controls.Add($srcLibrary)
 
+$srcLibraryExample = New-Object System.Windows.Forms.Label
+$srcLibraryExample.Location = New-Object System.Drawing.Point(150, 178)
+$srcLibraryExample.Size = New-Object System.Drawing.Size(280, 25)
+$srcLibraryExample.Text = "Example URL:"
+$grpSource.Controls.Add($srcLibraryExample)
+
 $srcLblSub = New-Object System.Windows.Forms.Label
-$srcLblSub.Location = New-Object System.Drawing.Point(20, 190)
+$srcLblSub.Location = New-Object System.Drawing.Point(20, 215)
 $srcLblSub.Size = New-Object System.Drawing.Size(120, 25)
 $srcLblSub.Text = "Subfolder (opt.):"
 $grpSource.Controls.Add($srcLblSub)
 
 $srcSubPath = New-Object System.Windows.Forms.TextBox
-$srcSubPath.Location = New-Object System.Drawing.Point(150, 188)
+$srcSubPath.Location = New-Object System.Drawing.Point(150, 213)
 $srcSubPath.Size = New-Object System.Drawing.Size(260, 25)
 $srcSubPath.Text = ""
 $grpSource.Controls.Add($srcSubPath)
 
-$srcHint = New-Object System.Windows.Forms.Label
-$srcHint.Location = New-Object System.Drawing.Point(20, 223)
-$srcHint.Size = New-Object System.Drawing.Size(400, 35)
-$srcHint.Text = "Library examples: SharePoint = Shared Documents, OneDrive = Documents. Empty subfolder = library root."
-$grpSource.Controls.Add($srcHint)
+$srcSubExample = New-Object System.Windows.Forms.Label
+$srcSubExample.Location = New-Object System.Drawing.Point(150, 238)
+$srcSubExample.Size = New-Object System.Drawing.Size(280, 45)
+$srcSubExample.Text = "Example URL:"
+$grpSource.Controls.Add($srcSubExample)
 
 $grpDest = New-Object System.Windows.Forms.GroupBox
 $grpDest.Text = "Destination"
 $grpDest.Location = New-Object System.Drawing.Point(500, 85)
-$grpDest.Size = New-Object System.Drawing.Size(450, 270)
+$grpDest.Size = New-Object System.Drawing.Size(450, 295)
 $form.Controls.Add($grpDest)
 
 $dstLblType = New-Object System.Windows.Forms.Label
@@ -725,7 +778,7 @@ $grpDest.Controls.Add($dstSitePath)
 $dstSiteExample = New-Object System.Windows.Forms.Label
 $dstSiteExample.Location = New-Object System.Drawing.Point(150, 88)
 $dstSiteExample.Size = New-Object System.Drawing.Size(280, 25)
-$dstSiteExample.Text = "Format: /sites/..."
+$dstSiteExample.Text = "Example URL:"
 $grpDest.Controls.Add($dstSiteExample)
 
 $dstLblEmail = New-Object System.Windows.Forms.Label
@@ -752,27 +805,33 @@ $dstLibrary.Size = New-Object System.Drawing.Size(260, 25)
 $dstLibrary.Text = "Shared Documents"
 $grpDest.Controls.Add($dstLibrary)
 
+$dstLibraryExample = New-Object System.Windows.Forms.Label
+$dstLibraryExample.Location = New-Object System.Drawing.Point(150, 178)
+$dstLibraryExample.Size = New-Object System.Drawing.Size(280, 25)
+$dstLibraryExample.Text = "Example URL:"
+$grpDest.Controls.Add($dstLibraryExample)
+
 $dstLblSub = New-Object System.Windows.Forms.Label
-$dstLblSub.Location = New-Object System.Drawing.Point(20, 190)
+$dstLblSub.Location = New-Object System.Drawing.Point(20, 215)
 $dstLblSub.Size = New-Object System.Drawing.Size(120, 25)
 $dstLblSub.Text = "Subfolder (opt.):"
 $grpDest.Controls.Add($dstLblSub)
 
 $dstSubPath = New-Object System.Windows.Forms.TextBox
-$dstSubPath.Location = New-Object System.Drawing.Point(150, 188)
+$dstSubPath.Location = New-Object System.Drawing.Point(150, 213)
 $dstSubPath.Size = New-Object System.Drawing.Size(260, 25)
 $dstSubPath.Text = ""
 $grpDest.Controls.Add($dstSubPath)
 
-$dstHint = New-Object System.Windows.Forms.Label
-$dstHint.Location = New-Object System.Drawing.Point(20, 223)
-$dstHint.Size = New-Object System.Drawing.Size(400, 35)
-$dstHint.Text = "Library examples: SharePoint = Shared Documents, OneDrive = Documents. Empty subfolder = library root."
-$grpDest.Controls.Add($dstHint)
+$dstSubExample = New-Object System.Windows.Forms.Label
+$dstSubExample.Location = New-Object System.Drawing.Point(150, 238)
+$dstSubExample.Size = New-Object System.Drawing.Size(280, 45)
+$dstSubExample.Text = "Example URL:"
+$grpDest.Controls.Add($dstSubExample)
 
 $grpOptions = New-Object System.Windows.Forms.GroupBox
 $grpOptions.Text = "Options"
-$grpOptions.Location = New-Object System.Drawing.Point(20, 375)
+$grpOptions.Location = New-Object System.Drawing.Point(20, 400)
 $grpOptions.Size = New-Object System.Drawing.Size(930, 90)
 $form.Controls.Add($grpOptions)
 
@@ -815,7 +874,7 @@ $btnRun.Text = "Start"
 $grpOptions.Controls.Add($btnRun)
 
 $txtSummary = New-Object System.Windows.Forms.TextBox
-$txtSummary.Location = New-Object System.Drawing.Point(20, 475)
+$txtSummary.Location = New-Object System.Drawing.Point(20, 500)
 $txtSummary.Size = New-Object System.Drawing.Size(930, 50)
 $txtSummary.Multiline = $true
 $txtSummary.ReadOnly = $true
@@ -823,8 +882,8 @@ $txtSummary.BackColor = [System.Drawing.Color]::White
 $form.Controls.Add($txtSummary)
 
 $txtLog = New-Object System.Windows.Forms.TextBox
-$txtLog.Location = New-Object System.Drawing.Point(20, 535)
-$txtLog.Size = New-Object System.Drawing.Size(930, 220)
+$txtLog.Location = New-Object System.Drawing.Point(20, 560)
+$txtLog.Size = New-Object System.Drawing.Size(930, 190)
 $txtLog.Multiline = $true
 $txtLog.ScrollBars = "Vertical"
 $txtLog.ReadOnly = $true
@@ -837,24 +896,46 @@ $txtTenant.Add_TextChanged({
     Update-TenantExamples -TenantBox $txtTenant -ExampleLabel $lblTenantExample
     Update-SitePathExample -TenantBox $txtTenant -TypeCombo $srcType -SitePathBox $srcSitePath -ExampleLabel $srcSiteExample
     Update-SitePathExample -TenantBox $txtTenant -TypeCombo $dstType -SitePathBox $dstSitePath -ExampleLabel $dstSiteExample
+    Update-LibrarySubfolderExamples -TenantBox $txtTenant -TypeCombo $srcType -SitePathBox $srcSitePath -LibraryBox $srcLibrary -SubPathBox $srcSubPath -LibraryExampleLabel $srcLibraryExample -SubfolderExampleLabel $srcSubExample
+    Update-LibrarySubfolderExamples -TenantBox $txtTenant -TypeCombo $dstType -SitePathBox $dstSitePath -LibraryBox $dstLibrary -SubPathBox $dstSubPath -LibraryExampleLabel $dstLibraryExample -SubfolderExampleLabel $dstSubExample
 })
 
 $srcSitePath.Add_TextChanged({
     Update-SitePathExample -TenantBox $txtTenant -TypeCombo $srcType -SitePathBox $srcSitePath -ExampleLabel $srcSiteExample
+    Update-LibrarySubfolderExamples -TenantBox $txtTenant -TypeCombo $srcType -SitePathBox $srcSitePath -LibraryBox $srcLibrary -SubPathBox $srcSubPath -LibraryExampleLabel $srcLibraryExample -SubfolderExampleLabel $srcSubExample
 })
 
 $dstSitePath.Add_TextChanged({
     Update-SitePathExample -TenantBox $txtTenant -TypeCombo $dstType -SitePathBox $dstSitePath -ExampleLabel $dstSiteExample
+    Update-LibrarySubfolderExamples -TenantBox $txtTenant -TypeCombo $dstType -SitePathBox $dstSitePath -LibraryBox $dstLibrary -SubPathBox $dstSubPath -LibraryExampleLabel $dstLibraryExample -SubfolderExampleLabel $dstSubExample
+})
+
+$srcLibrary.Add_TextChanged({
+    Update-LibrarySubfolderExamples -TenantBox $txtTenant -TypeCombo $srcType -SitePathBox $srcSitePath -LibraryBox $srcLibrary -SubPathBox $srcSubPath -LibraryExampleLabel $srcLibraryExample -SubfolderExampleLabel $srcSubExample
+})
+
+$dstLibrary.Add_TextChanged({
+    Update-LibrarySubfolderExamples -TenantBox $txtTenant -TypeCombo $dstType -SitePathBox $dstSitePath -LibraryBox $dstLibrary -SubPathBox $dstSubPath -LibraryExampleLabel $dstLibraryExample -SubfolderExampleLabel $dstSubExample
+})
+
+$srcSubPath.Add_TextChanged({
+    Update-LibrarySubfolderExamples -TenantBox $txtTenant -TypeCombo $srcType -SitePathBox $srcSitePath -LibraryBox $srcLibrary -SubPathBox $srcSubPath -LibraryExampleLabel $srcLibraryExample -SubfolderExampleLabel $srcSubExample
+})
+
+$dstSubPath.Add_TextChanged({
+    Update-LibrarySubfolderExamples -TenantBox $txtTenant -TypeCombo $dstType -SitePathBox $dstSitePath -LibraryBox $dstLibrary -SubPathBox $dstSubPath -LibraryExampleLabel $dstLibraryExample -SubfolderExampleLabel $dstSubExample
 })
 
 $srcType.Add_SelectedIndexChanged({
     Update-TypeUi -TypeCombo $srcType -SitePathBox $srcSitePath -EmailBox $srcEmail -LibraryBox $srcLibrary
     Update-SitePathExample -TenantBox $txtTenant -TypeCombo $srcType -SitePathBox $srcSitePath -ExampleLabel $srcSiteExample
+    Update-LibrarySubfolderExamples -TenantBox $txtTenant -TypeCombo $srcType -SitePathBox $srcSitePath -LibraryBox $srcLibrary -SubPathBox $srcSubPath -LibraryExampleLabel $srcLibraryExample -SubfolderExampleLabel $srcSubExample
 })
 
 $dstType.Add_SelectedIndexChanged({
     Update-TypeUi -TypeCombo $dstType -SitePathBox $dstSitePath -EmailBox $dstEmail -LibraryBox $dstLibrary
     Update-SitePathExample -TenantBox $txtTenant -TypeCombo $dstType -SitePathBox $dstSitePath -ExampleLabel $dstSiteExample
+    Update-LibrarySubfolderExamples -TenantBox $txtTenant -TypeCombo $dstType -SitePathBox $dstSitePath -LibraryBox $dstLibrary -SubPathBox $dstSubPath -LibraryExampleLabel $dstLibraryExample -SubfolderExampleLabel $dstSubExample
 })
 
 $btnFetch.Add_Click({
@@ -959,6 +1040,8 @@ Update-TypeUi -TypeCombo $dstType -SitePathBox $dstSitePath -EmailBox $dstEmail 
 Update-TenantExamples -TenantBox $txtTenant -ExampleLabel $lblTenantExample
 Update-SitePathExample -TenantBox $txtTenant -TypeCombo $srcType -SitePathBox $srcSitePath -ExampleLabel $srcSiteExample
 Update-SitePathExample -TenantBox $txtTenant -TypeCombo $dstType -SitePathBox $dstSitePath -ExampleLabel $dstSiteExample
+Update-LibrarySubfolderExamples -TenantBox $txtTenant -TypeCombo $srcType -SitePathBox $srcSitePath -LibraryBox $srcLibrary -SubPathBox $srcSubPath -LibraryExampleLabel $srcLibraryExample -SubfolderExampleLabel $srcSubExample
+Update-LibrarySubfolderExamples -TenantBox $txtTenant -TypeCombo $dstType -SitePathBox $dstSitePath -LibraryBox $dstLibrary -SubPathBox $dstSubPath -LibraryExampleLabel $dstLibraryExample -SubfolderExampleLabel $dstSubExample
 
 Write-Log "GUI started. Fill tenant + source/destination and click 'Get overview' first."
 [void]$form.ShowDialog()
