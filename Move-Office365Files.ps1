@@ -641,7 +641,7 @@ Ensure-RequiredPowerShell
 
 $form = New-Object System.Windows.Forms.Form
 $form.Text = "MS365 File Mover"
-$form.Size = New-Object System.Drawing.Size(980, 1060)
+$form.Size = New-Object System.Drawing.Size(735, 1060)
 $form.StartPosition = "CenterScreen"
 $form.MaximizeBox = $true
 
@@ -840,7 +840,7 @@ $grpDest.Controls.Add($dstSubExample)
 $grpOptions = New-Object System.Windows.Forms.GroupBox
 $grpOptions.Text = "Options"
 $grpOptions.Location = New-Object System.Drawing.Point(20, 700)
-$grpOptions.Size = New-Object System.Drawing.Size(930, 90)
+$grpOptions.Size = New-Object System.Drawing.Size(675, 90)
 $form.Controls.Add($grpOptions)
 
 $lblAction = New-Object System.Windows.Forms.Label
@@ -858,32 +858,32 @@ $cmbAction.SelectedIndex = 0
 $grpOptions.Controls.Add($cmbAction)
 
 $chkWhatIf = New-Object System.Windows.Forms.CheckBox
-$chkWhatIf.Location = New-Object System.Drawing.Point(250, 37)
+$chkWhatIf.Location = New-Object System.Drawing.Point(240, 37)
 $chkWhatIf.Size = New-Object System.Drawing.Size(160, 25)
 $chkWhatIf.Text = "WhatIf (no changes)"
 $grpOptions.Controls.Add($chkWhatIf)
 
 $btnFetch = New-Object System.Windows.Forms.Button
-$btnFetch.Location = New-Object System.Drawing.Point(470, 30)
-$btnFetch.Size = New-Object System.Drawing.Size(140, 35)
+$btnFetch.Location = New-Object System.Drawing.Point(395, 30)
+$btnFetch.Size = New-Object System.Drawing.Size(90, 35)
 $btnFetch.Text = "Get overview"
 $grpOptions.Controls.Add($btnFetch)
 
 $btnExportCsv = New-Object System.Windows.Forms.Button
-$btnExportCsv.Location = New-Object System.Drawing.Point(620, 30)
-$btnExportCsv.Size = New-Object System.Drawing.Size(130, 35)
+$btnExportCsv.Location = New-Object System.Drawing.Point(490, 30)
+$btnExportCsv.Size = New-Object System.Drawing.Size(90, 35)
 $btnExportCsv.Text = "Export CSV"
 $grpOptions.Controls.Add($btnExportCsv)
 
 $btnRun = New-Object System.Windows.Forms.Button
-$btnRun.Location = New-Object System.Drawing.Point(770, 30)
-$btnRun.Size = New-Object System.Drawing.Size(130, 35)
+$btnRun.Location = New-Object System.Drawing.Point(585, 30)
+$btnRun.Size = New-Object System.Drawing.Size(70, 35)
 $btnRun.Text = "Start"
 $grpOptions.Controls.Add($btnRun)
 
 $txtSummary = New-Object System.Windows.Forms.TextBox
 $txtSummary.Location = New-Object System.Drawing.Point(20, 800)
-$txtSummary.Size = New-Object System.Drawing.Size(930, 50)
+$txtSummary.Size = New-Object System.Drawing.Size(675, 50)
 $txtSummary.Multiline = $true
 $txtSummary.ReadOnly = $true
 $txtSummary.BackColor = [System.Drawing.Color]::White
@@ -891,7 +891,7 @@ $form.Controls.Add($txtSummary)
 
 $txtLog = New-Object System.Windows.Forms.TextBox
 $txtLog.Location = New-Object System.Drawing.Point(20, 860)
-$txtLog.Size = New-Object System.Drawing.Size(930, 160)
+$txtLog.Size = New-Object System.Drawing.Size(675, 160)
 $txtLog.Multiline = $true
 $txtLog.ScrollBars = "Vertical"
 $txtLog.ReadOnly = $true
