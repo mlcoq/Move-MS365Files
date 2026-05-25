@@ -419,8 +419,24 @@ function Refresh-LibrariesForEndpoint {
         return
     }
 
+    $type = [string]$TypeCombo.SelectedItem
+    if ($type -eq "SharePoint") {
+        $normalizedSitePath = Normalize-SharePointSitePath -SitePath $SitePathBox.Text
+        if ([string]::IsNullOrWhiteSpace($normalizedSitePath) -or ($script:TenantSitePaths.Count -gt 0 -and ($script:TenantSitePaths -notcontains $normalizedSitePath))) {
+            # Keep manual typing possible; do not call SharePoint while path is not a known selected tenant site.
+            return
+        }
+    }
+
+    if ($type -eq "OneDrive") {
+        $mail = $EmailBox.Text.Trim()
+        if ([string]::IsNullOrWhiteSpace($mail) -or ($mail -notmatch "@")) {
+            return
+        }
+    }
+
     try {
-        $siteUrl = Resolve-EndpointSiteUrl -Tenant $Tenant -Type ([string]$TypeCombo.SelectedItem) -SitePath $SitePathBox.Text -OneDriveEmail $EmailBox.Text
+        $siteUrl = Resolve-EndpointSiteUrl -Tenant $Tenant -Type $type -SitePath $SitePathBox.Text -OneDriveEmail $EmailBox.Text
         $libs = Get-AccessibleLibraries -SiteUrl $siteUrl
 
         Update-LibraryDropdownItems -LibraryBox $LibraryBox -Libraries $libs
@@ -451,8 +467,23 @@ function Refresh-SubfoldersForEndpoint {
         return
     }
 
+    $type = [string]$TypeCombo.SelectedItem
+    if ($type -eq "SharePoint") {
+        $normalizedSitePath = Normalize-SharePointSitePath -SitePath $SitePathBox.Text
+        if ([string]::IsNullOrWhiteSpace($normalizedSitePath) -or ($script:TenantSitePaths.Count -gt 0 -and ($script:TenantSitePaths -notcontains $normalizedSitePath))) {
+            return
+        }
+    }
+
+    if ($type -eq "OneDrive") {
+        $mail = $EmailBox.Text.Trim()
+        if ([string]::IsNullOrWhiteSpace($mail) -or ($mail -notmatch "@")) {
+            return
+        }
+    }
+
     try {
-        $siteUrl = Resolve-EndpointSiteUrl -Tenant $Tenant -Type ([string]$TypeCombo.SelectedItem) -SitePath $SitePathBox.Text -OneDriveEmail $EmailBox.Text
+        $siteUrl = Resolve-EndpointSiteUrl -Tenant $Tenant -Type $type -SitePath $SitePathBox.Text -OneDriveEmail $EmailBox.Text
         $subfolders = Get-AccessibleSubfolders -SiteUrl $siteUrl -Library $library
 
         Update-SubfolderDropdownItems -SubfolderBox $SubfolderBox -Subfolders $subfolders
