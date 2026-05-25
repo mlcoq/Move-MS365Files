@@ -172,6 +172,32 @@ function Set-ExampleLabelState {
     }
 }
 
+function Update-TenantConnectionUi {
+    param(
+        [System.Windows.Forms.TextBox]$TenantBox,
+        [System.Windows.Forms.Button]$ConnectButton,
+        [System.Windows.Forms.Button]$DisconnectButton,
+        [System.Windows.Forms.Label]$TenantExampleLabel,
+        [bool]$IsConnected
+    )
+
+    if ($IsConnected) {
+        $tenant = $TenantBox.Text.Trim().ToLowerInvariant()
+        $TenantBox.Enabled = $false
+        $ConnectButton.Visible = $false
+        $DisconnectButton.Visible = $true
+        $TenantExampleLabel.ForeColor = [System.Drawing.Color]::ForestGreen
+        $TenantExampleLabel.Text = "https://$tenant.sharepoint.com - Connected"
+        return
+    }
+
+    $TenantBox.Enabled = $true
+    $ConnectButton.Visible = $true
+    $DisconnectButton.Visible = $false
+    $TenantExampleLabel.ForeColor = [System.Drawing.Color]::Black
+    Update-TenantExamples -TenantBox $TenantBox -ExampleLabel $TenantExampleLabel
+}
+
 function Build-Endpoint {
     param(
         [string]$Tenant,
@@ -815,6 +841,13 @@ $btnTenantConnect.Size = New-Object System.Drawing.Size(120, 28)
 $btnTenantConnect.Text = "Connect"
 $form.Controls.Add($btnTenantConnect)
 
+$btnTenantDisconnect = New-Object System.Windows.Forms.Button
+$btnTenantDisconnect.Location = New-Object System.Drawing.Point(250, 48)
+$btnTenantDisconnect.Size = New-Object System.Drawing.Size(120, 28)
+$btnTenantDisconnect.Text = "Disconnect"
+$btnTenantDisconnect.Visible = $false
+$form.Controls.Add($btnTenantDisconnect)
+
 $lblTenantExample = New-Object System.Windows.Forms.Label
 $lblTenantExample.Location = New-Object System.Drawing.Point(20, 78)
 $lblTenantExample.Size = New-Object System.Drawing.Size(930, 30)
@@ -1074,10 +1107,26 @@ $btnTenantConnect.Add_Click({
         Write-Log "Connecting to tenant: $tenantUrl"
         $script:TenantConnection = Connect-PnPOnline -Url $tenantUrl -Interactive -ReturnConnection -ErrorAction Stop
         Write-Log "Connected to tenant: $tenantUrl" "SUCCESS"
+        Update-TenantConnectionUi -TenantBox $txtTenant -ConnectButton $btnTenantConnect -DisconnectButton $btnTenantDisconnect -TenantExampleLabel $lblTenantExample -IsConnected $true
         [System.Windows.Forms.MessageBox]::Show("Connected to $tenantUrl", "Connected", "OK", "Information") | Out-Null
     } catch {
         Write-Log "Tenant connect failed: $_" "ERROR"
         [System.Windows.Forms.MessageBox]::Show("Tenant connect failed: $_", "Error", "OK", "Error") | Out-Null
+    }
+})
+
+$btnTenantDisconnect.Add_Click({
+    try {
+        if ($null -ne $script:TenantConnection) {
+            Disconnect-PnPOnline -Connection $script:TenantConnection -ErrorAction SilentlyContinue
+            $script:TenantConnection = $null
+        }
+
+        Update-TenantConnectionUi -TenantBox $txtTenant -ConnectButton $btnTenantConnect -DisconnectButton $btnTenantDisconnect -TenantExampleLabel $lblTenantExample -IsConnected $false
+        Write-Log "Disconnected from tenant." "SUCCESS"
+    } catch {
+        Write-Log "Tenant disconnect failed: $_" "ERROR"
+        [System.Windows.Forms.MessageBox]::Show("Tenant disconnect failed: $_", "Error", "OK", "Error") | Out-Null
     }
 })
 
@@ -1235,7 +1284,7 @@ $btnRun.Add_Click({
 
 Update-TypeUi -TypeCombo $srcType -SitePathBox $srcSitePath -EmailBox $srcEmail -LibraryBox $srcLibrary
 Update-TypeUi -TypeCombo $dstType -SitePathBox $dstSitePath -EmailBox $dstEmail -LibraryBox $dstLibrary
-Update-TenantExamples -TenantBox $txtTenant -ExampleLabel $lblTenantExample
+Update-TenantConnectionUi -TenantBox $txtTenant -ConnectButton $btnTenantConnect -DisconnectButton $btnTenantDisconnect -TenantExampleLabel $lblTenantExample -IsConnected $false
 Update-EndpointUiState -TenantBox $txtTenant -TypeCombo $srcType -SitePathBox $srcSitePath -EmailBox $srcEmail -LibraryBox $srcLibrary -SubPathBox $srcSubPath -SiteExampleLabel $srcSiteExample -LibraryExampleLabel $srcLibraryExample -SubfolderExampleLabel $srcSubExample
 Update-EndpointUiState -TenantBox $txtTenant -TypeCombo $dstType -SitePathBox $dstSitePath -EmailBox $dstEmail -LibraryBox $dstLibrary -SubPathBox $dstSubPath -SiteExampleLabel $dstSiteExample -LibraryExampleLabel $dstLibraryExample -SubfolderExampleLabel $dstSubExample
 
