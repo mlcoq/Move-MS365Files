@@ -1,5 +1,5 @@
 # ============================================================
-#  Move-Office365Files.ps1 (GUI)
+#  MS365Mover (GUI)
 #
 #  Migrate files between SharePoint Online and OneDrive for Business.
 #  Input is collected via a WinForms GUI:
@@ -18,7 +18,7 @@
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
-$script:LogFile = "$PSScriptRoot\MoveLog_$(Get-Date -Format 'yyyyMMdd_HHmmss').txt"
+$script:LogFile = "$PSScriptRoot\MS365Mover_Log_$(Get-Date -Format 'yyyyMMdd_HHmmss').txt"
 $script:LogTextBox = $null
 $script:LastOverview = $null
 
@@ -33,7 +33,7 @@ function Write-Log {
     Write-Host $line
     Add-Content -Path $script:LogFile -Value $line
 
-    if ($script:LogTextBox -ne $null) {
+    if ($null -ne $script:LogTextBox) {
         $script:LogTextBox.AppendText($line + [Environment]::NewLine)
         $script:LogTextBox.SelectionStart = $script:LogTextBox.TextLength
         $script:LogTextBox.ScrollToCaret()
@@ -43,12 +43,12 @@ function Write-Log {
 
 function Ensure-PnPModule {
     if (-not (Get-Module -ListAvailable -Name "PnP.PowerShell")) {
-        Write-Log "PnP.PowerShell niet gevonden. Installeren..." "WARN"
+        Write-Log "PnP.PowerShell not found. Installing..." "WARN"
         Install-Module PnP.PowerShell -Scope CurrentUser -Force -AllowClobber
     }
 
     Import-Module PnP.PowerShell -ErrorAction Stop
-    Write-Log "Module PnP.PowerShell geladen." "SUCCESS"
+    Write-Log "PnP.PowerShell module loaded." "SUCCESS"
 }
 
 function Join-UrlPath {
@@ -89,11 +89,11 @@ function Build-Endpoint {
     )
 
     if ([string]::IsNullOrWhiteSpace($Tenant)) {
-        throw "Tenantnaam is verplicht."
+        throw "Tenant name is required."
     }
 
     if ([string]::IsNullOrWhiteSpace($Library)) {
-        throw "Librarynaam is verplicht."
+        throw "Library name is required."
     }
 
     $tenantClean = $Tenant.Trim().ToLowerInvariant()
@@ -124,7 +124,7 @@ function Build-Endpoint {
 
     if ($Type -eq "OneDrive") {
         if ([string]::IsNullOrWhiteSpace($OneDriveEmail)) {
-            throw "OneDrive e-mailadres is verplicht."
+            throw "OneDrive email is required."
         }
 
         $segment = Convert-EmailToOneDriveSegment -Email $OneDriveEmail
@@ -142,7 +142,7 @@ function Build-Endpoint {
         }
     }
 
-    throw "Onbekend type '$Type'."
+    throw "Unknown type '$Type'."
 }
 
 function Get-FolderStatsRecursive {
@@ -163,7 +163,7 @@ function Get-FolderStatsRecursive {
     try {
         $files = Get-PnPFolderItem -FolderSiteRelativeUrl $FolderRel -ItemType File -Connection $Connection -ErrorAction Stop
     } catch {
-        Write-Log "Kon files niet uitlezen in '$FolderRel': $_" "ERROR"
+        Write-Log "Could not read files in '$FolderRel': $_" "ERROR"
     }
 
     foreach ($f in $files) {
@@ -178,7 +178,7 @@ function Get-FolderStatsRecursive {
     try {
         $folders = Get-PnPFolderItem -FolderSiteRelativeUrl $FolderRel -ItemType Folder -Connection $Connection -ErrorAction Stop
     } catch {
-        Write-Log "Kon subfolders niet uitlezen in '$FolderRel': $_" "ERROR"
+        Write-Log "Could not read subfolders in '$FolderRel': $_" "ERROR"
     }
 
     foreach ($sub in $folders) {
@@ -212,9 +212,9 @@ function Assert-LibraryExists {
 
     try {
         $null = Get-PnPList -Identity $LibraryName -Connection $Connection -ErrorAction Stop
-        Write-Log "$RoleLabel library gevonden: '$LibraryName'" "SUCCESS"
+        Write-Log "$RoleLabel library found: '$LibraryName'" "SUCCESS"
     } catch {
-        throw "$RoleLabel library '$LibraryName' bestaat niet of is niet toegankelijk."
+        throw "$RoleLabel library '$LibraryName' does not exist or is not accessible."
     }
 }
 
@@ -234,7 +234,7 @@ function Copy-FolderRecursive {
     try {
         $files = Get-PnPFolderItem -FolderSiteRelativeUrl $SrcFolderRelUrl -ItemType File -Connection $SourceConnection -ErrorAction Stop
     } catch {
-        Write-Log "Kon files niet uitlezen in '$SrcFolderRelUrl': $_" "ERROR"
+        Write-Log "Could not read files in '$SrcFolderRelUrl': $_" "ERROR"
     }
 
     foreach ($file in $files) {
@@ -263,10 +263,10 @@ function Copy-FolderRecursive {
             }
 
             Copy-PnPFile @copyParams
-            Write-Log "Gekopieerd: $srcPath" "SUCCESS"
+            Write-Log "Copied: $srcPath" "SUCCESS"
             $Counters.Value.Copied++
         } catch {
-            Write-Log "Mislukt kopieren: $srcPath - $_" "ERROR"
+            Write-Log "Copy failed: $srcPath - $_" "ERROR"
             $Counters.Value.Failed++
         }
     }
@@ -275,7 +275,7 @@ function Copy-FolderRecursive {
     try {
         $subFolders = Get-PnPFolderItem -FolderSiteRelativeUrl $SrcFolderRelUrl -ItemType Folder -Connection $SourceConnection -ErrorAction Stop
     } catch {
-        Write-Log "Kon subfolders niet uitlezen in '$SrcFolderRelUrl': $_" "ERROR"
+        Write-Log "Could not read subfolders in '$SrcFolderRelUrl': $_" "ERROR"
     }
 
     foreach ($sub in $subFolders) {
@@ -283,12 +283,12 @@ function Copy-FolderRecursive {
         $subDst = "$DstFolderAbsUrl/$($sub.Name)"
 
         if ($WhatIfMode) {
-            Write-Log "[WHATIF] Maak/check map: $subDst" "WARN"
+            Write-Log "[WHATIF] Create/check folder: $subDst" "WARN"
         } else {
             try {
                 Ensure-DestinationFolder -FolderAbs $subDst -Connection $DestinationConnection
             } catch {
-                Write-Log "Kon doelmap niet aanmaken/checken '$subDst': $_" "WARN"
+                Write-Log "Could not create/check destination folder '$subDst': $_" "WARN"
             }
         }
 
@@ -314,28 +314,28 @@ function Invoke-Migration {
 
     Ensure-PnPModule
 
-    Write-Log "Start migratie"
-    Write-Log "Bron: $($Source.SiteUrl) | $($Source.FolderRel)"
-    Write-Log "Doel: $($Destination.SiteUrl) | $($Destination.FolderAbs)"
-    Write-Log ("Actie: " + (if ($MoveMode) { "Verplaatsen" } else { "Kopieren" }))
-    if ($WhatIfMode) { Write-Log "WhatIf mode actief." "WARN" }
+    Write-Log "Starting migration"
+    Write-Log "Source: $($Source.SiteUrl) | $($Source.FolderRel)"
+    Write-Log "Destination: $($Destination.SiteUrl) | $($Destination.FolderAbs)"
+    Write-Log ("Action: " + (if ($MoveMode) { "Move" } else { "Copy" }))
+    if ($WhatIfMode) { Write-Log "WhatIf mode is active." "WARN" }
 
     $srcConn = $null
     $dstConn = $null
     $sameSite = ($Source.SiteUrl.TrimEnd("/") -ieq $Destination.SiteUrl.TrimEnd("/"))
 
     try {
-        Write-Log "Aanmelden op BRON..."
+        Write-Log "Signing in to SOURCE..."
         $srcConn = Connect-PnPOnline -Url $Source.SiteUrl -Interactive -ReturnConnection -ErrorAction Stop
-        Write-Log "Aangemeld op BRON." "SUCCESS"
+        Write-Log "Signed in to SOURCE." "SUCCESS"
 
         if ($sameSite) {
             $dstConn = $srcConn
-            Write-Log "Bron en doel staan op dezelfde site."
+            Write-Log "Source and destination are on the same site."
         } else {
-            Write-Log "Aanmelden op DOEL..."
+            Write-Log "Signing in to DESTINATION..."
             $dstConn = Connect-PnPOnline -Url $Destination.SiteUrl -Interactive -ReturnConnection -ErrorAction Stop
-            Write-Log "Aangemeld op DOEL." "SUCCESS"
+            Write-Log "Signed in to DESTINATION." "SUCCESS"
         }
 
         Assert-LibraryExists -LibraryName $Source.Library -Connection $srcConn -RoleLabel "Source"
@@ -343,7 +343,7 @@ function Invoke-Migration {
 
         $stats = Get-FolderStatsRecursive -FolderRel $Source.FolderRel -Connection $srcConn
         $sizeGb = [math]::Round($stats.TotalBytes / 1GB, 3)
-        Write-Log "Bronoverzicht: $($stats.FileCount) files, $($stats.FolderCount) folders, $sizeGb GB"
+        Write-Log "Source overview: $($stats.FileCount) files, $($stats.FolderCount) folders, $sizeGb GB"
 
         if (-not $WhatIfMode) {
             Ensure-DestinationFolder -FolderAbs $Destination.FolderAbs -Connection $dstConn
@@ -356,7 +356,7 @@ function Invoke-Migration {
             $topFiles = Get-PnPFolderItem -FolderSiteRelativeUrl $Source.FolderRel -ItemType File -Connection $srcConn -ErrorAction Stop
             $topFolders = Get-PnPFolderItem -FolderSiteRelativeUrl $Source.FolderRel -ItemType Folder -Connection $srcConn -ErrorAction Stop
         } catch {
-            throw "Kon top-level inhoud niet ophalen: $_"
+            throw "Could not retrieve top-level content: $_"
         }
 
         $counters = [pscustomobject]@{
@@ -389,10 +389,10 @@ function Invoke-Migration {
                     }
 
                     Copy-PnPFile @copyParams
-                    Write-Log "Gekopieerd: $srcPath" "SUCCESS"
+                    Write-Log "Copied: $srcPath" "SUCCESS"
                     $counterRef.Value.Copied++
                 } catch {
-                    Write-Log "Mislukt kopieren: $srcPath - $_" "ERROR"
+                    Write-Log "Copy failed: $srcPath - $_" "ERROR"
                     $counterRef.Value.Failed++
                 }
             }
@@ -403,12 +403,12 @@ function Invoke-Migration {
             $dstSub = "$($Destination.FolderAbs)/$($folder.Name)"
 
             if ($WhatIfMode) {
-                Write-Log "[WHATIF] Maak/check map: $dstSub" "WARN"
+                Write-Log "[WHATIF] Create/check folder: $dstSub" "WARN"
             } else {
                 try {
                     Ensure-DestinationFolder -FolderAbs $dstSub -Connection $dstConn
                 } catch {
-                    Write-Log "Kon doelmap niet aanmaken/checken '$dstSub': $_" "WARN"
+                    Write-Log "Could not create/check destination folder '$dstSub': $_" "WARN"
                 }
             }
 
@@ -425,10 +425,10 @@ function Invoke-Migration {
             if ($MoveMode -and -not $WhatIfMode) {
                 try {
                     Remove-PnPFolder -Name $folder.Name -Folder $Source.FolderRel -Force -Connection $srcConn -ErrorAction Stop
-                    Write-Log "Bronmap verwijderd: $($folder.Name)" "SUCCESS"
+                    Write-Log "Source folder removed: $($folder.Name)" "SUCCESS"
                     $counterRef.Value.Deleted++
                 } catch {
-                    Write-Log "Kon bronmap niet verwijderen '$($folder.Name)': $_" "WARN"
+                    Write-Log "Could not remove source folder '$($folder.Name)': $_" "WARN"
                 }
             }
         }
@@ -438,20 +438,20 @@ function Invoke-Migration {
                 $srcPath = "$($Source.FolderRel)/$($file.Name)"
                 try {
                     Remove-PnPFile -ServerRelativeUrl $srcPath -Force -Connection $srcConn -ErrorAction Stop
-                    Write-Log "Bronfile verwijderd: $srcPath" "SUCCESS"
+                    Write-Log "Source file removed: $srcPath" "SUCCESS"
                     $counterRef.Value.Deleted++
                 } catch {
-                    Write-Log "Kon bronfile niet verwijderen '$srcPath': $_" "WARN"
+                    Write-Log "Could not remove source file '$srcPath': $_" "WARN"
                 }
             }
         }
 
         Write-Log "========================================"
-        Write-Log "Migratie klaar"
-        Write-Log "Gekopieerd : $($counterRef.Value.Copied)"
-        Write-Log "Mislukt    : $($counterRef.Value.Failed)"
-        Write-Log "Verwijderd : $($counterRef.Value.Deleted)"
-        Write-Log "Logbestand : $script:LogFile"
+        Write-Log "Migration completed"
+        Write-Log "Copied    : $($counterRef.Value.Copied)"
+        Write-Log "Failed    : $($counterRef.Value.Failed)"
+        Write-Log "Removed   : $($counterRef.Value.Deleted)"
+        Write-Log "Log file  : $script:LogFile"
         Write-Log "========================================"
 
         return [pscustomobject]@{
@@ -461,10 +461,10 @@ function Invoke-Migration {
             Deleted = $counterRef.Value.Deleted
         }
     } finally {
-        if ($srcConn -ne $null) {
+        if ($null -ne $srcConn) {
             Disconnect-PnPOnline -Connection $srcConn -ErrorAction SilentlyContinue
         }
-        if ($dstConn -ne $null -and (-not $sameSite)) {
+        if ($null -ne $dstConn -and (-not $sameSite)) {
             Disconnect-PnPOnline -Connection $dstConn -ErrorAction SilentlyContinue
         }
     }
@@ -513,9 +513,23 @@ function Update-TypeUi {
     }
 }
 
+function Update-TenantExamples {
+    param(
+        [System.Windows.Forms.TextBox]$TenantBox,
+        [System.Windows.Forms.Label]$ExampleLabel
+    )
+
+    $tenant = $TenantBox.Text.Trim().ToLowerInvariant()
+    if ([string]::IsNullOrWhiteSpace($tenant)) {
+        $tenant = "<tenant>"
+    }
+
+    $ExampleLabel.Text = "Examples: SharePoint URL https://$tenant.sharepoint.com/sites/Finance | OneDrive URL https://$tenant-my.sharepoint.com/personal/john_doe_contoso_com"
+}
+
 # ---------------- GUI ----------------
 $form = New-Object System.Windows.Forms.Form
-$form.Text = "Office365 File Mover"
+$form.Text = "MS365 File Mover"
 $form.Size = New-Object System.Drawing.Size(980, 760)
 $form.StartPosition = "CenterScreen"
 $form.MaximizeBox = $true
@@ -534,9 +548,15 @@ $txtTenant.Location = New-Object System.Drawing.Point(250, 18)
 $txtTenant.Size = New-Object System.Drawing.Size(260, 25)
 $form.Controls.Add($txtTenant)
 
+$lblTenantExample = New-Object System.Windows.Forms.Label
+$lblTenantExample.Location = New-Object System.Drawing.Point(20, 48)
+$lblTenantExample.Size = New-Object System.Drawing.Size(930, 30)
+$lblTenantExample.Text = "Examples: SharePoint URL https://<tenant>.sharepoint.com/sites/Finance | OneDrive URL https://<tenant>-my.sharepoint.com/personal/john_doe_contoso_com"
+$form.Controls.Add($lblTenantExample)
+
 $grpSource = New-Object System.Windows.Forms.GroupBox
 $grpSource.Text = "Source"
-$grpSource.Location = New-Object System.Drawing.Point(20, 60)
+$grpSource.Location = New-Object System.Drawing.Point(20, 85)
 $grpSource.Size = New-Object System.Drawing.Size(450, 250)
 $form.Controls.Add($grpSource)
 
@@ -557,7 +577,7 @@ $grpSource.Controls.Add($srcType)
 $srcLblSite = New-Object System.Windows.Forms.Label
 $srcLblSite.Location = New-Object System.Drawing.Point(20, 65)
 $srcLblSite.Size = New-Object System.Drawing.Size(120, 25)
-$srcLblSite.Text = "Site pad:"
+$srcLblSite.Text = "Site path:"
 $grpSource.Controls.Add($srcLblSite)
 
 $srcSitePath = New-Object System.Windows.Forms.TextBox
@@ -569,7 +589,7 @@ $grpSource.Controls.Add($srcSitePath)
 $srcLblEmail = New-Object System.Windows.Forms.Label
 $srcLblEmail.Location = New-Object System.Drawing.Point(20, 100)
 $srcLblEmail.Size = New-Object System.Drawing.Size(120, 25)
-$srcLblEmail.Text = "OneDrive e-mail:"
+$srcLblEmail.Text = "OneDrive email:"
 $grpSource.Controls.Add($srcLblEmail)
 
 $srcEmail = New-Object System.Windows.Forms.TextBox
@@ -593,7 +613,7 @@ $grpSource.Controls.Add($srcLibrary)
 $srcLblSub = New-Object System.Windows.Forms.Label
 $srcLblSub.Location = New-Object System.Drawing.Point(20, 170)
 $srcLblSub.Size = New-Object System.Drawing.Size(120, 25)
-$srcLblSub.Text = "Submap (opt.):"
+$srcLblSub.Text = "Subfolder (opt.):"
 $grpSource.Controls.Add($srcLblSub)
 
 $srcSubPath = New-Object System.Windows.Forms.TextBox
@@ -605,12 +625,12 @@ $grpSource.Controls.Add($srcSubPath)
 $srcHint = New-Object System.Windows.Forms.Label
 $srcHint.Location = New-Object System.Drawing.Point(20, 205)
 $srcHint.Size = New-Object System.Drawing.Size(400, 35)
-$srcHint.Text = "Leeg submap veld = root van de library"
+$srcHint.Text = "Library examples: SharePoint = Shared Documents, OneDrive = Documents. Empty subfolder = library root."
 $grpSource.Controls.Add($srcHint)
 
 $grpDest = New-Object System.Windows.Forms.GroupBox
 $grpDest.Text = "Destination"
-$grpDest.Location = New-Object System.Drawing.Point(500, 60)
+$grpDest.Location = New-Object System.Drawing.Point(500, 85)
 $grpDest.Size = New-Object System.Drawing.Size(450, 250)
 $form.Controls.Add($grpDest)
 
@@ -631,7 +651,7 @@ $grpDest.Controls.Add($dstType)
 $dstLblSite = New-Object System.Windows.Forms.Label
 $dstLblSite.Location = New-Object System.Drawing.Point(20, 65)
 $dstLblSite.Size = New-Object System.Drawing.Size(120, 25)
-$dstLblSite.Text = "Site pad:"
+$dstLblSite.Text = "Site path:"
 $grpDest.Controls.Add($dstLblSite)
 
 $dstSitePath = New-Object System.Windows.Forms.TextBox
@@ -643,7 +663,7 @@ $grpDest.Controls.Add($dstSitePath)
 $dstLblEmail = New-Object System.Windows.Forms.Label
 $dstLblEmail.Location = New-Object System.Drawing.Point(20, 100)
 $dstLblEmail.Size = New-Object System.Drawing.Size(120, 25)
-$dstLblEmail.Text = "OneDrive e-mail:"
+$dstLblEmail.Text = "OneDrive email:"
 $grpDest.Controls.Add($dstLblEmail)
 
 $dstEmail = New-Object System.Windows.Forms.TextBox
@@ -667,7 +687,7 @@ $grpDest.Controls.Add($dstLibrary)
 $dstLblSub = New-Object System.Windows.Forms.Label
 $dstLblSub.Location = New-Object System.Drawing.Point(20, 170)
 $dstLblSub.Size = New-Object System.Drawing.Size(120, 25)
-$dstLblSub.Text = "Submap (opt.):"
+$dstLblSub.Text = "Subfolder (opt.):"
 $grpDest.Controls.Add($dstLblSub)
 
 $dstSubPath = New-Object System.Windows.Forms.TextBox
@@ -679,39 +699,39 @@ $grpDest.Controls.Add($dstSubPath)
 $dstHint = New-Object System.Windows.Forms.Label
 $dstHint.Location = New-Object System.Drawing.Point(20, 205)
 $dstHint.Size = New-Object System.Drawing.Size(400, 35)
-$dstHint.Text = "Leeg submap veld = root van de library"
+$dstHint.Text = "Library examples: SharePoint = Shared Documents, OneDrive = Documents. Empty subfolder = library root."
 $grpDest.Controls.Add($dstHint)
 
 $grpOptions = New-Object System.Windows.Forms.GroupBox
-$grpOptions.Text = "Opties"
-$grpOptions.Location = New-Object System.Drawing.Point(20, 325)
+$grpOptions.Text = "Options"
+$grpOptions.Location = New-Object System.Drawing.Point(20, 350)
 $grpOptions.Size = New-Object System.Drawing.Size(930, 90)
 $form.Controls.Add($grpOptions)
 
 $lblAction = New-Object System.Windows.Forms.Label
 $lblAction.Location = New-Object System.Drawing.Point(20, 38)
 $lblAction.Size = New-Object System.Drawing.Size(60, 25)
-$lblAction.Text = "Actie:"
+$lblAction.Text = "Action:"
 $grpOptions.Controls.Add($lblAction)
 
 $cmbAction = New-Object System.Windows.Forms.ComboBox
 $cmbAction.Location = New-Object System.Drawing.Point(85, 35)
 $cmbAction.Size = New-Object System.Drawing.Size(140, 25)
 $cmbAction.DropDownStyle = "DropDownList"
-[void]$cmbAction.Items.AddRange(@("Kopieren", "Verplaatsen"))
+[void]$cmbAction.Items.AddRange(@("Copy", "Move"))
 $cmbAction.SelectedIndex = 0
 $grpOptions.Controls.Add($cmbAction)
 
 $chkWhatIf = New-Object System.Windows.Forms.CheckBox
 $chkWhatIf.Location = New-Object System.Drawing.Point(250, 37)
 $chkWhatIf.Size = New-Object System.Drawing.Size(160, 25)
-$chkWhatIf.Text = "WhatIf (geen wijzigingen)"
+$chkWhatIf.Text = "WhatIf (no changes)"
 $grpOptions.Controls.Add($chkWhatIf)
 
 $btnFetch = New-Object System.Windows.Forms.Button
 $btnFetch.Location = New-Object System.Drawing.Point(470, 30)
 $btnFetch.Size = New-Object System.Drawing.Size(140, 35)
-$btnFetch.Text = "Ophalen overzicht"
+$btnFetch.Text = "Get overview"
 $grpOptions.Controls.Add($btnFetch)
 
 $btnExportCsv = New-Object System.Windows.Forms.Button
@@ -727,7 +747,7 @@ $btnRun.Text = "Start"
 $grpOptions.Controls.Add($btnRun)
 
 $txtSummary = New-Object System.Windows.Forms.TextBox
-$txtSummary.Location = New-Object System.Drawing.Point(20, 425)
+$txtSummary.Location = New-Object System.Drawing.Point(20, 450)
 $txtSummary.Size = New-Object System.Drawing.Size(930, 50)
 $txtSummary.Multiline = $true
 $txtSummary.ReadOnly = $true
@@ -735,7 +755,7 @@ $txtSummary.BackColor = [System.Drawing.Color]::White
 $form.Controls.Add($txtSummary)
 
 $txtLog = New-Object System.Windows.Forms.TextBox
-$txtLog.Location = New-Object System.Drawing.Point(20, 485)
+$txtLog.Location = New-Object System.Drawing.Point(20, 510)
 $txtLog.Size = New-Object System.Drawing.Size(930, 220)
 $txtLog.Multiline = $true
 $txtLog.ScrollBars = "Vertical"
@@ -744,6 +764,10 @@ $txtLog.BackColor = [System.Drawing.Color]::White
 $form.Controls.Add($txtLog)
 
 $script:LogTextBox = $txtLog
+
+$txtTenant.Add_TextChanged({
+    Update-TenantExamples -TenantBox $txtTenant -ExampleLabel $lblTenantExample
+})
 
 $srcType.Add_SelectedIndexChanged({
     Update-TypeUi -TypeCombo $srcType -SitePathBox $srcSitePath -EmailBox $srcEmail -LibraryBox $srcLibrary
@@ -759,14 +783,14 @@ $btnFetch.Add_Click({
         $source = Get-EndpointFromUi -Tenant $tenant -TypeCombo $srcType -SitePathBox $srcSitePath -LibraryBox $srcLibrary -SubPathBox $srcSubPath -EmailBox $srcEmail
 
         Ensure-PnPModule
-        Write-Log "Overzicht ophalen voor bron..."
+        Write-Log "Fetching source overview..."
         $srcConn = Connect-PnPOnline -Url $source.SiteUrl -Interactive -ReturnConnection -ErrorAction Stop
 
         try {
             Assert-LibraryExists -LibraryName $source.Library -Connection $srcConn -RoleLabel "Source"
             $stats = Get-FolderStatsRecursive -FolderRel $source.FolderRel -Connection $srcConn
             $gb = [math]::Round($stats.TotalBytes / 1GB, 3)
-            $txtSummary.Text = "Bron: $($source.SiteUrl) | Pad: $($source.FolderRel) | Files: $($stats.FileCount) | Folders: $($stats.FolderCount) | Grootte: $gb GB"
+            $txtSummary.Text = "Source: $($source.SiteUrl) | Path: $($source.FolderRel) | Files: $($stats.FileCount) | Folders: $($stats.FolderCount) | Size: $gb GB"
 
             $script:LastOverview = [pscustomobject]@{
                 Timestamp = Get-Date
@@ -781,26 +805,26 @@ $btnFetch.Add_Click({
                 TotalGB = $gb
             }
 
-            Write-Log "Overzicht klaar: $($stats.FileCount) files, $($stats.FolderCount) folders, $gb GB" "SUCCESS"
+            Write-Log "Overview ready: $($stats.FileCount) files, $($stats.FolderCount) folders, $gb GB" "SUCCESS"
         } finally {
             Disconnect-PnPOnline -Connection $srcConn -ErrorAction SilentlyContinue
         }
     } catch {
-        Write-Log "Overzicht ophalen mislukt: $_" "ERROR"
-        [System.Windows.Forms.MessageBox]::Show("Overzicht ophalen mislukt: $_", "Fout", "OK", "Error") | Out-Null
+        Write-Log "Failed to fetch overview: $_" "ERROR"
+        [System.Windows.Forms.MessageBox]::Show("Failed to fetch overview: $_", "Error", "OK", "Error") | Out-Null
     }
 })
 
 $btnExportCsv.Add_Click({
     try {
         if ($null -eq $script:LastOverview) {
-            throw "Er is nog geen overzicht opgehaald. Klik eerst op 'Ophalen overzicht'."
+            throw "No overview has been fetched yet. Click 'Get overview' first."
         }
 
         $saveDialog = New-Object System.Windows.Forms.SaveFileDialog
-        $saveDialog.Title = "Opslaan als CSV"
+        $saveDialog.Title = "Save as CSV"
         $saveDialog.Filter = "CSV files (*.csv)|*.csv|All files (*.*)|*.*"
-        $saveDialog.FileName = "Office365FileMover_Overview_$(Get-Date -Format 'yyyyMMdd_HHmmss').csv"
+        $saveDialog.FileName = "MS365Mover_Overview_$(Get-Date -Format 'yyyyMMdd_HHmmss').csv"
         $saveDialog.InitialDirectory = $PSScriptRoot
 
         $dialogResult = $saveDialog.ShowDialog()
@@ -809,11 +833,11 @@ $btnExportCsv.Add_Click({
         }
 
         $script:LastOverview | Export-Csv -Path $saveDialog.FileName -NoTypeInformation -Encoding UTF8
-        Write-Log "Overzicht geexporteerd naar: $($saveDialog.FileName)" "SUCCESS"
-        [System.Windows.Forms.MessageBox]::Show("CSV opgeslagen:\n$($saveDialog.FileName)", "Export gereed", "OK", "Information") | Out-Null
+        Write-Log "Overview exported to: $($saveDialog.FileName)" "SUCCESS"
+        [System.Windows.Forms.MessageBox]::Show("CSV saved:\n$($saveDialog.FileName)", "Export complete", "OK", "Information") | Out-Null
     } catch {
-        Write-Log "CSV export mislukt: $_" "ERROR"
-        [System.Windows.Forms.MessageBox]::Show("CSV export mislukt: $_", "Fout", "OK", "Error") | Out-Null
+        Write-Log "CSV export failed: $_" "ERROR"
+        [System.Windows.Forms.MessageBox]::Show("CSV export failed: $_", "Error", "OK", "Error") | Out-Null
     }
 })
 
@@ -823,35 +847,36 @@ $btnRun.Add_Click({
         $source = Get-EndpointFromUi -Tenant $tenant -TypeCombo $srcType -SitePathBox $srcSitePath -LibraryBox $srcLibrary -SubPathBox $srcSubPath -EmailBox $srcEmail
         $dest = Get-EndpointFromUi -Tenant $tenant -TypeCombo $dstType -SitePathBox $dstSitePath -LibraryBox $dstLibrary -SubPathBox $dstSubPath -EmailBox $dstEmail
 
-        $moveMode = ([string]$cmbAction.SelectedItem -eq "Verplaatsen")
+        $moveMode = ([string]$cmbAction.SelectedItem -eq "Move")
         $whatIfMode = $chkWhatIf.Checked
 
         if ($source.SiteUrl.TrimEnd("/") -ieq $dest.SiteUrl.TrimEnd("/") -and $source.FolderAbs.TrimEnd("/") -ieq $dest.FolderAbs.TrimEnd("/")) {
-            throw "Bron en doel zijn identiek. Kies een ander doelpad."
+            throw "Source and destination are identical. Choose a different destination path."
         }
 
-        $confirmText = "Actie: " + (if ($moveMode) { "Verplaatsen" } else { "Kopieren" }) + "`n`nBron:`n$($source.SiteUrl)`n$($source.FolderRel)`n`nDoel:`n$($dest.SiteUrl)`n$($dest.FolderAbs)"
-        $confirm = [System.Windows.Forms.MessageBox]::Show($confirmText, "Bevestigen", "OKCancel", "Question")
+        $confirmText = "Action: " + (if ($moveMode) { "Move" } else { "Copy" }) + "`n`nSource:`n$($source.SiteUrl)`n$($source.FolderRel)`n`nDestination:`n$($dest.SiteUrl)`n$($dest.FolderAbs)"
+        $confirm = [System.Windows.Forms.MessageBox]::Show($confirmText, "Confirm", "OKCancel", "Question")
         if ($confirm -ne [System.Windows.Forms.DialogResult]::OK) {
-            Write-Log "Actie geannuleerd door gebruiker." "WARN"
+            Write-Log "Action canceled by user." "WARN"
             return
         }
 
         $result = Invoke-Migration -Source $source -Destination $dest -MoveMode $moveMode -WhatIfMode $whatIfMode
 
         if ($result.Success) {
-            [System.Windows.Forms.MessageBox]::Show("Klaar. Alles verwerkt.", "Gereed", "OK", "Information") | Out-Null
+            [System.Windows.Forms.MessageBox]::Show("Done. Everything processed.", "Completed", "OK", "Information") | Out-Null
         } else {
-            [System.Windows.Forms.MessageBox]::Show("Klaar met fouten. Controleer logbestand.", "Klaar met waarschuwingen", "OK", "Warning") | Out-Null
+            [System.Windows.Forms.MessageBox]::Show("Done with errors. Check the log file.", "Completed with warnings", "OK", "Warning") | Out-Null
         }
     } catch {
-        Write-Log "Migratie mislukt: $_" "ERROR"
-        [System.Windows.Forms.MessageBox]::Show("Migratie mislukt: $_", "Fout", "OK", "Error") | Out-Null
+        Write-Log "Migration failed: $_" "ERROR"
+        [System.Windows.Forms.MessageBox]::Show("Migration failed: $_", "Error", "OK", "Error") | Out-Null
     }
 })
 
 Update-TypeUi -TypeCombo $srcType -SitePathBox $srcSitePath -EmailBox $srcEmail -LibraryBox $srcLibrary
 Update-TypeUi -TypeCombo $dstType -SitePathBox $dstSitePath -EmailBox $dstEmail -LibraryBox $dstLibrary
+Update-TenantExamples -TenantBox $txtTenant -ExampleLabel $lblTenantExample
 
-Write-Log "GUI gestart. Vul tenant + bron/doel in en gebruik eerst 'Ophalen overzicht'."
+Write-Log "GUI started. Fill tenant + source/destination and click 'Get overview' first."
 [void]$form.ShowDialog()
