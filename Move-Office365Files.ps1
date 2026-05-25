@@ -622,7 +622,7 @@ function Update-TenantExamples {
         $tenant = "<tenant>"
     }
 
-    $ExampleLabel.Text = "Examples: SharePoint URL https://$tenant.sharepoint.com/sites/Finance | OneDrive URL https://$tenant-my.sharepoint.com/personal/john_doe_contoso_com"
+    $ExampleLabel.Text = "https://$tenant.sharepoint.com"
 }
 
 function Update-SitePathExample {
@@ -811,7 +811,7 @@ $form.Controls.Add($txtTenant)
 $lblTenantExample = New-Object System.Windows.Forms.Label
 $lblTenantExample.Location = New-Object System.Drawing.Point(20, 48)
 $lblTenantExample.Size = New-Object System.Drawing.Size(930, 30)
-$lblTenantExample.Text = "Examples: SharePoint URL https://<tenant>.sharepoint.com/sites/Finance | OneDrive URL https://<tenant>-my.sharepoint.com/personal/john_doe_contoso_com"
+$lblTenantExample.Text = "https://<tenant>.sharepoint.com"
 $form.Controls.Add($lblTenantExample)
 
 $grpSource = New-Object System.Windows.Forms.GroupBox
