@@ -108,6 +108,18 @@ function Convert-EmailToOneDriveSegment {
     return $segment
 }
 
+function Normalize-SharePointSitePath {
+    param([string]$SitePath)
+
+    $path = $SitePath.Trim().Trim("/")
+    if ([string]::IsNullOrWhiteSpace($path)) {
+        return ""
+    }
+
+    $path = $path -replace "^(?i)sites/", ""
+    return "sites/$path"
+}
+
 function Build-Endpoint {
     param(
         [string]$Tenant,
@@ -131,7 +143,7 @@ function Build-Endpoint {
     $subPathClean = if ([string]::IsNullOrWhiteSpace($SubPath)) { "" } else { $SubPath.Trim("/") }
 
     if ($Type -eq "SharePoint") {
-        $sitePathClean = if ([string]::IsNullOrWhiteSpace($SitePath)) { "" } else { $SitePath.Trim("/") }
+        $sitePathClean = Normalize-SharePointSitePath -SitePath $SitePath
         $siteUrl = if ([string]::IsNullOrWhiteSpace($sitePathClean)) {
             "https://$tenantClean.sharepoint.com"
         } else {
@@ -581,10 +593,12 @@ function Update-SitePathExample {
     }
 
     $enteredPath = $SitePathBox.Text.Trim().Trim("/")
-    $defaultPath = "sites/Finance"
+    $defaultPath = "Finance"
     if ([string]::IsNullOrWhiteSpace($enteredPath)) {
         $enteredPath = $defaultPath
     }
+
+    $enteredPath = Normalize-SharePointSitePath -SitePath $enteredPath
 
     $ExampleLabel.Text = "https://$tenant.sharepoint.com/$enteredPath"
 }
@@ -628,8 +642,10 @@ function Update-LibrarySubfolderExamples {
 
     $sitePath = $SitePathBox.Text.Trim().Trim("/")
     if ([string]::IsNullOrWhiteSpace($sitePath)) {
-        $sitePath = "sites/Finance"
+        $sitePath = "Finance"
     }
+
+    $sitePath = Normalize-SharePointSitePath -SitePath $sitePath
 
     $baseUrl = "https://$tenant.sharepoint.com/$sitePath"
     $LibraryExampleLabel.Text = "$baseUrl/$library"
