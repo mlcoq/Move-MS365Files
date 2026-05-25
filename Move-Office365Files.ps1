@@ -28,7 +28,9 @@ $script:LibraryOptionsCache = @{}
 $script:SubfolderOptionsCache = @{}
 $script:StateRoot = Join-Path $env:LOCALAPPDATA "MS365Mover"
 $script:TenantRegistrationPath = Join-Path $script:StateRoot "tenant-registration.json"
-$script:PnPAppRegistrationPath = Join-Path $script:StateRoot "pnp-interactive-app.json"
+$script:PnPClientIdPath = Join-Path $script:StateRoot "pnp-clientid.txt"
+$script:PnPClientId = ""
+$script:UseDeviceLogin = $false
 
 function Ensure-StateRoot {
     if (-not (Test-Path -Path $script:StateRoot)) {
@@ -80,125 +82,116 @@ function Clear-TenantRegistration {
     Remove-Item -Path $script:TenantRegistrationPath -Force -ErrorAction SilentlyContinue
 }
 
-function Load-PnPInteractiveAppRegistration {
-    if (-not (Test-Path -Path $script:PnPAppRegistrationPath)) {
-        return $null
+function Load-PnPClientId {
+    $envClientId = $env:MS365MOVER_PNP_CLIENTID
+    if (-not [string]::IsNullOrWhiteSpace($envClientId)) {
+        return $envClientId.Trim()
+    }
+
+    if (Test-Path -Path $script:PnPClientIdPath) {
+        try {
+            return (Get-Content -Path $script:PnPClientIdPath -Raw).Trim()
+        } catch {
+            return ""
+        }
+    }
+
+    return ""
+}
+
+function Save-PnPClientId {
+    param([string]$ClientId)
+
+    Ensure-StateRoot
+    Set-Content -Path $script:PnPClientIdPath -Value $ClientId.Trim() -Encoding UTF8
+}
+
+function Get-LegacyAutoRegisteredClientId {
+    $legacyPath = Join-Path $script:StateRoot "pnp-interactive-app.json"
+    if (-not (Test-Path -Path $legacyPath)) {
+        return ""
     }
 
     try {
-        $data = Get-Content -Path $script:PnPAppRegistrationPath -Raw | ConvertFrom-Json
-        if ([string]::IsNullOrWhiteSpace($data.tenant) -or [string]::IsNullOrWhiteSpace($data.clientId) -or [string]::IsNullOrWhiteSpace($data.expiresUtc)) {
-            return $null
-        }
-
-        $expiresUtc = [DateTime]::Parse($data.expiresUtc).ToUniversalTime()
-        return [pscustomobject]@{
-            Tenant = [string]$data.tenant
-            ClientId = [string]$data.clientId
-            ExpiresUtc = $expiresUtc
+        $legacy = Get-Content -Path $legacyPath -Raw | ConvertFrom-Json
+        if ($null -ne $legacy.clientId -and -not [string]::IsNullOrWhiteSpace([string]$legacy.clientId)) {
+            return [string]$legacy.clientId
         }
     } catch {
-        return $null
     }
+
+    return ""
 }
 
-function Save-PnPInteractiveAppRegistration {
+function Ensure-ConfiguredPnPClientId {
+    if (-not [string]::IsNullOrWhiteSpace($script:PnPClientId)) {
+        return $script:PnPClientId
+    }
+
+    $loaded = Load-PnPClientId
+    if (-not [string]::IsNullOrWhiteSpace($loaded)) {
+        $script:PnPClientId = $loaded
+        return $script:PnPClientId
+    }
+
+    $legacy = Get-LegacyAutoRegisteredClientId
+    if (-not [string]::IsNullOrWhiteSpace($legacy)) {
+        $script:PnPClientId = $legacy
+        Save-PnPClientId -ClientId $legacy
+        Write-Log "Migrated legacy PnP Client ID to local config." "INFO"
+        return $script:PnPClientId
+    }
+
+    throw "No shared PnP Client ID configured. Set env var MS365MOVER_PNP_CLIENTID or create file '$($script:PnPClientIdPath)' containing the Client ID."
+}
+
+function Connect-PnPWithAuth {
     param(
-        [string]$Tenant,
-        [string]$ClientId,
-        [int]$Days = 30
+        [string]$Url,
+        [switch]$ReturnConnection
     )
 
-    Ensure-StateRoot
+    [void](Ensure-ConfiguredPnPClientId)
 
-    $safeDays = [Math]::Max(1, $Days)
-    $data = [pscustomobject]@{
-        tenant = $Tenant.Trim().ToLowerInvariant()
-        clientId = $ClientId
-        expiresUtc = (Get-Date).ToUniversalTime().AddDays($safeDays).ToString("o")
+    $params = @{
+        Url = $Url
+        ClientId = $script:PnPClientId
+        ErrorAction = "Stop"
     }
 
-    $data | ConvertTo-Json | Set-Content -Path $script:PnPAppRegistrationPath -Encoding UTF8
-}
-
-function Get-ValidPnPClientIdForTenant {
-    param([string]$Tenant)
-
-    $tenantKey = $Tenant.Trim().ToLowerInvariant()
-    $saved = Load-PnPInteractiveAppRegistration
-    if ($null -eq $saved) {
-        return $null
-    }
-
-    if ($saved.Tenant -ne $tenantKey) {
-        return $null
-    }
-
-    if ((Get-Date).ToUniversalTime() -ge $saved.ExpiresUtc) {
-        return $null
-    }
-
-    return $saved.ClientId
-}
-
-function Resolve-EntraTenantDomain {
-    param([string]$Tenant)
-
-    $t = $Tenant.Trim().ToLowerInvariant()
-    if ($t.Contains(".")) {
-        return $t
-    }
-
-    return "$t.onmicrosoft.com"
-}
-
-function Extract-ClientIdFromRegistrationResult {
-    param($RegistrationResult)
-
-    if ($null -ne $RegistrationResult) {
-        if ($null -ne $RegistrationResult.AppId -and -not [string]::IsNullOrWhiteSpace([string]$RegistrationResult.AppId)) {
-            return [string]$RegistrationResult.AppId
+    if ($script:UseDeviceLogin) {
+        $params["DeviceLogin"] = $true
+        if ($ReturnConnection) {
+            $params["ReturnConnection"] = $true
         }
-        if ($null -ne $RegistrationResult.ClientId -and -not [string]::IsNullOrWhiteSpace([string]$RegistrationResult.ClientId)) {
-            return [string]$RegistrationResult.ClientId
+        return Connect-PnPOnline @params
+    }
+
+    # Prefer browser interactive login, then gracefully fall back to device login when unsupported on this machine.
+    $interactiveParams = @{}
+    foreach ($k in $params.Keys) { $interactiveParams[$k] = $params[$k] }
+    $interactiveParams["Interactive"] = $true
+    if ($ReturnConnection) {
+        $interactiveParams["ReturnConnection"] = $true
+    }
+
+    try {
+        return Connect-PnPOnline @interactiveParams
+    } catch {
+        $msg = $_.ToString()
+        if ($msg -match "Specified method is not supported|browser|WebView|interaction") {
+            Write-Log "Interactive login not available, switching to Device Login." "WARN"
+            $deviceParams = @{}
+            foreach ($k in $params.Keys) { $deviceParams[$k] = $params[$k] }
+            $deviceParams["DeviceLogin"] = $true
+            if ($ReturnConnection) {
+                $deviceParams["ReturnConnection"] = $true
+            }
+            return Connect-PnPOnline @deviceParams
         }
+
+        throw
     }
-
-    $text = $RegistrationResult | Out-String
-    $guid = [regex]::Match($text, "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}")
-    if ($guid.Success) {
-        return $guid.Value
-    }
-
-    return $null
-}
-
-function Ensure-PnPInteractiveClientId {
-    param(
-        [string]$Tenant,
-        [int]$ValidityDays = 30
-    )
-
-    $existing = Get-ValidPnPClientIdForTenant -Tenant $Tenant
-    if (-not [string]::IsNullOrWhiteSpace($existing)) {
-        Save-PnPInteractiveAppRegistration -Tenant $Tenant -ClientId $existing -Days $ValidityDays
-        return $existing
-    }
-
-    $tenantDomain = Resolve-EntraTenantDomain -Tenant $Tenant
-    $appName = "MS365Mover-Interactive"
-    Write-Log "No valid PnP client id found. Registering Entra app '$appName' for tenant $tenantDomain..." "WARN"
-
-    $result = Register-PnPEntraIDAppForInteractiveLogin -ApplicationName $appName -Tenant $tenantDomain -ErrorAction Stop
-    $clientId = Extract-ClientIdFromRegistrationResult -RegistrationResult $result
-
-    if ([string]::IsNullOrWhiteSpace($clientId)) {
-        throw "Could not determine ClientId from Entra app registration output."
-    }
-
-    Save-PnPInteractiveAppRegistration -Tenant $Tenant -ClientId $clientId -Days $ValidityDays
-    Write-Log "Entra app ready. ClientId stored with $ValidityDays day validity." "SUCCESS"
-    return $clientId
 }
 
 function Get-TenantSitePaths {
@@ -213,7 +206,7 @@ function Get-TenantSitePaths {
     $conn = $null
 
     try {
-        $conn = Connect-PnPOnline -Url $adminUrl -Interactive -ReturnConnection -ErrorAction Stop
+        $conn = Connect-PnPWithAuth -Url $adminUrl -ReturnConnection
         $sites = Get-PnPTenantSite -Connection $conn -ErrorAction Stop
 
         $paths = @()
@@ -344,7 +337,7 @@ function Get-AccessibleLibraries {
 
     $conn = $null
     try {
-        $conn = Connect-PnPOnline -Url $SiteUrl -Interactive -ReturnConnection -ErrorAction Stop
+        $conn = Connect-PnPWithAuth -Url $SiteUrl -ReturnConnection
         $libs = Get-PnPList -Connection $conn -ErrorAction Stop |
             Where-Object { $_.BaseTemplate -eq 101 -and -not $_.Hidden } |
             Select-Object -ExpandProperty Title |
@@ -372,7 +365,7 @@ function Get-AccessibleSubfolders {
 
     $conn = $null
     try {
-        $conn = Connect-PnPOnline -Url $SiteUrl -Interactive -ReturnConnection -ErrorAction Stop
+        $conn = Connect-PnPWithAuth -Url $SiteUrl -ReturnConnection
         $result = New-Object System.Collections.Generic.List[string]
 
         function Read-FoldersRecursive {
@@ -965,7 +958,7 @@ function Invoke-Migration {
 
     try {
         Write-Log "Signing in to SOURCE..."
-        $srcConn = Connect-PnPOnline -Url $Source.SiteUrl -Interactive -ReturnConnection -ErrorAction Stop
+        $srcConn = Connect-PnPWithAuth -Url $Source.SiteUrl -ReturnConnection
         Write-Log "Signed in to SOURCE." "SUCCESS"
 
         if ($sameSite) {
@@ -973,7 +966,7 @@ function Invoke-Migration {
             Write-Log "Source and destination are on the same site."
         } else {
             Write-Log "Signing in to DESTINATION..."
-            $dstConn = Connect-PnPOnline -Url $Destination.SiteUrl -Interactive -ReturnConnection -ErrorAction Stop
+            $dstConn = Connect-PnPWithAuth -Url $Destination.SiteUrl -ReturnConnection
             Write-Log "Signed in to DESTINATION." "SUCCESS"
         }
 
@@ -1642,7 +1635,7 @@ $btnTenantConnect.Add_Click({
         $tenantUrl = "https://$tenant.sharepoint.com"
         Ensure-PnPModule
 
-        $clientId = Ensure-PnPInteractiveClientId -Tenant $tenant -ValidityDays 30
+        [void](Ensure-ConfiguredPnPClientId)
 
         if ($null -ne $script:TenantConnection) {
             Disconnect-PnPOnline -Connection $script:TenantConnection -ErrorAction SilentlyContinue
@@ -1650,7 +1643,7 @@ $btnTenantConnect.Add_Click({
         }
 
         Write-Log "Connecting to tenant: $tenantUrl"
-        $script:TenantConnection = Connect-PnPOnline -Url $tenantUrl -Interactive -ClientId $clientId -ReturnConnection -ErrorAction Stop
+        $script:TenantConnection = Connect-PnPWithAuth -Url $tenantUrl -ReturnConnection
         Write-Log "Connected to tenant: $tenantUrl" "SUCCESS"
 
         try {
@@ -1794,7 +1787,7 @@ $btnFetch.Add_Click({
 
         Ensure-PnPModule
         Write-Log "Fetching source overview..."
-        $srcConn = Connect-PnPOnline -Url $source.SiteUrl -Interactive -ReturnConnection -ErrorAction Stop
+        $srcConn = Connect-PnPWithAuth -Url $source.SiteUrl -ReturnConnection
 
         try {
             Assert-LibraryExists -LibraryName $source.Library -Connection $srcConn -RoleLabel "Source"
@@ -1891,6 +1884,17 @@ $registeredTenant = Load-TenantRegistration
 if (-not [string]::IsNullOrWhiteSpace($registeredTenant) -and [string]::IsNullOrWhiteSpace($txtTenant.Text)) {
     $txtTenant.Text = $registeredTenant
     Write-Log "Loaded saved tenant registration." "INFO"
+}
+
+$script:PnPClientId = Load-PnPClientId
+if (-not [string]::IsNullOrWhiteSpace($script:PnPClientId)) {
+    Write-Log "Loaded shared PnP Client ID from configuration." "INFO"
+}
+
+$deviceLoginEnv = $env:MS365MOVER_DEVICE_LOGIN
+if (-not [string]::IsNullOrWhiteSpace($deviceLoginEnv) -and $deviceLoginEnv -match "^(?i)1|true|yes$") {
+    $script:UseDeviceLogin = $true
+    Write-Log "Device login is enabled via environment setting." "INFO"
 }
 
 $numTenantDays.Enabled = $chkRememberTenant.Checked
