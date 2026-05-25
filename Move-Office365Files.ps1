@@ -24,6 +24,7 @@ $script:LogTextBox = $null
 $script:LastOverview = $null
 $script:TenantConnection = $null
 $script:TenantSitePaths = @()
+$script:LibraryOptionsCache = @{}
 $script:StateRoot = Join-Path $env:LOCALAPPDATA "MS365Mover"
 $script:TenantRegistrationPath = Join-Path $script:StateRoot "tenant-registration.json"
 
@@ -137,6 +138,114 @@ function Update-SitePathDropdownItems {
 
     $SourceSitePathBox.Text = $srcCurrent
     $DestinationSitePathBox.Text = $dstCurrent
+}
+
+function Update-LibraryDropdownItems {
+    param(
+        [System.Windows.Forms.ComboBox]$LibraryBox,
+        [string[]]$Libraries
+    )
+
+    $current = $LibraryBox.Text
+    $LibraryBox.Items.Clear()
+
+    if ($null -ne $Libraries -and $Libraries.Count -gt 0) {
+        [void]$LibraryBox.Items.AddRange($Libraries)
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($current)) {
+        $LibraryBox.Text = $current
+    } elseif ($null -ne $Libraries -and $Libraries.Count -gt 0) {
+        $LibraryBox.Text = $Libraries[0]
+    }
+}
+
+function Resolve-EndpointSiteUrl {
+    param(
+        [string]$Tenant,
+        [string]$Type,
+        [string]$SitePath,
+        [string]$OneDriveEmail
+    )
+
+    $tenantClean = $Tenant.Trim().ToLowerInvariant()
+    if ([string]::IsNullOrWhiteSpace($tenantClean)) {
+        throw "Tenant is required."
+    }
+
+    if ($Type -eq "SharePoint") {
+        $siteValidation = Get-SharePointSitePathValidation -SitePath $SitePath
+        if (-not $siteValidation.IsValid) {
+            throw $siteValidation.Error
+        }
+
+        return "https://$tenantClean.sharepoint.com/$($siteValidation.Normalized)"
+    }
+
+    if ($Type -eq "OneDrive") {
+        if ([string]::IsNullOrWhiteSpace($OneDriveEmail)) {
+            throw "OneDrive email is required."
+        }
+
+        $segment = Convert-EmailToOneDriveSegment -Email $OneDriveEmail
+        return "https://$tenantClean-my.sharepoint.com/personal/$segment"
+    }
+
+    throw "Unknown type '$Type'."
+}
+
+function Get-AccessibleLibraries {
+    param([string]$SiteUrl)
+
+    if ($script:LibraryOptionsCache.ContainsKey($SiteUrl)) {
+        return $script:LibraryOptionsCache[$SiteUrl]
+    }
+
+    $conn = $null
+    try {
+        $conn = Connect-PnPOnline -Url $SiteUrl -Interactive -ReturnConnection -ErrorAction Stop
+        $libs = Get-PnPList -Connection $conn -ErrorAction Stop |
+            Where-Object { $_.BaseTemplate -eq 101 -and -not $_.Hidden } |
+            Select-Object -ExpandProperty Title |
+            Sort-Object -Unique
+
+        $script:LibraryOptionsCache[$SiteUrl] = @($libs)
+        return @($libs)
+    } finally {
+        if ($null -ne $conn) {
+            Disconnect-PnPOnline -Connection $conn -ErrorAction SilentlyContinue
+        }
+    }
+}
+
+function Refresh-LibrariesForEndpoint {
+    param(
+        [string]$Tenant,
+        [System.Windows.Forms.ComboBox]$TypeCombo,
+        [System.Windows.Forms.ComboBox]$SitePathBox,
+        [System.Windows.Forms.TextBox]$EmailBox,
+        [System.Windows.Forms.ComboBox]$LibraryBox,
+        [System.Windows.Forms.Label]$LibraryExampleLabel,
+        [string]$RoleLabel
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Tenant)) {
+        Update-LibraryDropdownItems -LibraryBox $LibraryBox -Libraries @()
+        return
+    }
+
+    try {
+        $siteUrl = Resolve-EndpointSiteUrl -Tenant $Tenant -Type ([string]$TypeCombo.SelectedItem) -SitePath $SitePathBox.Text -OneDriveEmail $EmailBox.Text
+        $libs = Get-AccessibleLibraries -SiteUrl $siteUrl
+
+        Update-LibraryDropdownItems -LibraryBox $LibraryBox -Libraries $libs
+        if ($libs.Count -eq 0) {
+            Set-ExampleLabelState -Label $LibraryExampleLabel -Text "${RoleLabel}: no accessible libraries found at $siteUrl" -IsError $true -Show $true
+        }
+    } catch {
+        Update-LibraryDropdownItems -LibraryBox $LibraryBox -Libraries @()
+        Set-ExampleLabelState -Label $LibraryExampleLabel -Text "${RoleLabel}: cannot load libraries - $_" -IsError $true -Show $true
+    }
 }
 
 function Ensure-RequiredPowerShell {
@@ -759,7 +868,7 @@ function Get-EndpointFromUi {
         [string]$Tenant,
         [System.Windows.Forms.ComboBox]$TypeCombo,
         [System.Windows.Forms.ComboBox]$SitePathBox,
-        [System.Windows.Forms.TextBox]$LibraryBox,
+        [System.Windows.Forms.ComboBox]$LibraryBox,
         [System.Windows.Forms.TextBox]$SubPathBox,
         [System.Windows.Forms.TextBox]$EmailBox
     )
@@ -779,7 +888,7 @@ function Update-TypeUi {
         [System.Windows.Forms.ComboBox]$TypeCombo,
         [System.Windows.Forms.ComboBox]$SitePathBox,
         [System.Windows.Forms.TextBox]$EmailBox,
-        [System.Windows.Forms.TextBox]$LibraryBox
+        [System.Windows.Forms.ComboBox]$LibraryBox
     )
 
     $isOneDrive = ([string]$TypeCombo.SelectedItem -eq "OneDrive")
@@ -850,7 +959,7 @@ function Update-LibrarySubfolderExamples {
         [System.Windows.Forms.ComboBox]$TypeCombo,
         [System.Windows.Forms.ComboBox]$SitePathBox,
         [System.Windows.Forms.TextBox]$EmailBox,
-        [System.Windows.Forms.TextBox]$LibraryBox,
+        [System.Windows.Forms.ComboBox]$LibraryBox,
         [System.Windows.Forms.TextBox]$SubPathBox,
         [System.Windows.Forms.Label]$LibraryExampleLabel,
         [System.Windows.Forms.Label]$SubfolderExampleLabel,
@@ -931,7 +1040,7 @@ function Update-EndpointUiState {
         [System.Windows.Forms.ComboBox]$TypeCombo,
         [System.Windows.Forms.ComboBox]$SitePathBox,
         [System.Windows.Forms.TextBox]$EmailBox,
-        [System.Windows.Forms.TextBox]$LibraryBox,
+        [System.Windows.Forms.ComboBox]$LibraryBox,
         [System.Windows.Forms.TextBox]$SubPathBox,
         [System.Windows.Forms.Label]$SiteExampleLabel,
         [System.Windows.Forms.Label]$LibraryExampleLabel,
@@ -1091,9 +1200,10 @@ $srcLblLibrary.Size = New-Object System.Drawing.Size(120, 25)
 $srcLblLibrary.Text = "Library:"
 $grpSource.Controls.Add($srcLblLibrary)
 
-$srcLibrary = New-Object System.Windows.Forms.TextBox
+$srcLibrary = New-Object System.Windows.Forms.ComboBox
 $srcLibrary.Location = New-Object System.Drawing.Point(150, 153)
 $srcLibrary.Size = New-Object System.Drawing.Size(485, 25)
+$srcLibrary.DropDownStyle = "DropDown"
 $srcLibrary.Text = "Shared Documents"
 $grpSource.Controls.Add($srcLibrary)
 
@@ -1178,9 +1288,10 @@ $dstLblLibrary.Size = New-Object System.Drawing.Size(120, 25)
 $dstLblLibrary.Text = "Library:"
 $grpDest.Controls.Add($dstLblLibrary)
 
-$dstLibrary = New-Object System.Windows.Forms.TextBox
+$dstLibrary = New-Object System.Windows.Forms.ComboBox
 $dstLibrary.Location = New-Object System.Drawing.Point(150, 153)
 $dstLibrary.Size = New-Object System.Drawing.Size(485, 25)
+$dstLibrary.DropDownStyle = "DropDown"
 $dstLibrary.Text = "Shared Documents"
 $grpDest.Controls.Add($dstLibrary)
 
@@ -1299,6 +1410,9 @@ $btnTenantConnect.Add_Click({
             Write-Log "Could not load tenant site paths. You can still type site path manually. $_" "WARN"
         }
 
+        Refresh-LibrariesForEndpoint -Tenant $tenant -TypeCombo $srcType -SitePathBox $srcSitePath -EmailBox $srcEmail -LibraryBox $srcLibrary -LibraryExampleLabel $srcLibraryExample -RoleLabel "Source"
+        Refresh-LibrariesForEndpoint -Tenant $tenant -TypeCombo $dstType -SitePathBox $dstSitePath -EmailBox $dstEmail -LibraryBox $dstLibrary -LibraryExampleLabel $dstLibraryExample -RoleLabel "Destination"
+
         if ($chkRememberTenant.Checked) {
             Save-TenantRegistration -Tenant $tenant -Days ([int]$numTenantDays.Value)
             Write-Log "Tenant registration saved for $([int]$numTenantDays.Value) day(s)." "SUCCESS"
@@ -1320,7 +1434,10 @@ $btnTenantDisconnect.Add_Click({
         }
 
         $script:TenantSitePaths = @()
+        $script:LibraryOptionsCache = @{}
         Update-SitePathDropdownItems -SourceSitePathBox $srcSitePath -DestinationSitePathBox $dstSitePath -SitePaths $script:TenantSitePaths
+        Update-LibraryDropdownItems -LibraryBox $srcLibrary -Libraries @()
+        Update-LibraryDropdownItems -LibraryBox $dstLibrary -Libraries @()
 
         Update-TenantConnectionUi -TenantBox $txtTenant -ConnectButton $btnTenantConnect -DisconnectButton $btnTenantDisconnect -TenantExampleLabel $lblTenantExample -IsConnected $false
         Write-Log "Disconnected from tenant." "SUCCESS"
@@ -1351,18 +1468,22 @@ $txtTenant.Add_TextChanged({
 })
 
 $srcSitePath.Add_TextChanged({
+    Refresh-LibrariesForEndpoint -Tenant $txtTenant.Text.Trim() -TypeCombo $srcType -SitePathBox $srcSitePath -EmailBox $srcEmail -LibraryBox $srcLibrary -LibraryExampleLabel $srcLibraryExample -RoleLabel "Source"
     Update-EndpointUiState -TenantBox $txtTenant -TypeCombo $srcType -SitePathBox $srcSitePath -EmailBox $srcEmail -LibraryBox $srcLibrary -SubPathBox $srcSubPath -SiteExampleLabel $srcSiteExample -LibraryExampleLabel $srcLibraryExample -SubfolderExampleLabel $srcSubExample
 })
 
 $dstSitePath.Add_TextChanged({
+    Refresh-LibrariesForEndpoint -Tenant $txtTenant.Text.Trim() -TypeCombo $dstType -SitePathBox $dstSitePath -EmailBox $dstEmail -LibraryBox $dstLibrary -LibraryExampleLabel $dstLibraryExample -RoleLabel "Destination"
     Update-EndpointUiState -TenantBox $txtTenant -TypeCombo $dstType -SitePathBox $dstSitePath -EmailBox $dstEmail -LibraryBox $dstLibrary -SubPathBox $dstSubPath -SiteExampleLabel $dstSiteExample -LibraryExampleLabel $dstLibraryExample -SubfolderExampleLabel $dstSubExample
 })
 
 $srcEmail.Add_TextChanged({
+    Refresh-LibrariesForEndpoint -Tenant $txtTenant.Text.Trim() -TypeCombo $srcType -SitePathBox $srcSitePath -EmailBox $srcEmail -LibraryBox $srcLibrary -LibraryExampleLabel $srcLibraryExample -RoleLabel "Source"
     Update-EndpointUiState -TenantBox $txtTenant -TypeCombo $srcType -SitePathBox $srcSitePath -EmailBox $srcEmail -LibraryBox $srcLibrary -SubPathBox $srcSubPath -SiteExampleLabel $srcSiteExample -LibraryExampleLabel $srcLibraryExample -SubfolderExampleLabel $srcSubExample
 })
 
 $dstEmail.Add_TextChanged({
+    Refresh-LibrariesForEndpoint -Tenant $txtTenant.Text.Trim() -TypeCombo $dstType -SitePathBox $dstSitePath -EmailBox $dstEmail -LibraryBox $dstLibrary -LibraryExampleLabel $dstLibraryExample -RoleLabel "Destination"
     Update-EndpointUiState -TenantBox $txtTenant -TypeCombo $dstType -SitePathBox $dstSitePath -EmailBox $dstEmail -LibraryBox $dstLibrary -SubPathBox $dstSubPath -SiteExampleLabel $dstSiteExample -LibraryExampleLabel $dstLibraryExample -SubfolderExampleLabel $dstSubExample
 })
 
@@ -1384,11 +1505,13 @@ $dstSubPath.Add_TextChanged({
 
 $srcType.Add_SelectedIndexChanged({
     Update-TypeUi -TypeCombo $srcType -SitePathBox $srcSitePath -EmailBox $srcEmail -LibraryBox $srcLibrary
+    Refresh-LibrariesForEndpoint -Tenant $txtTenant.Text.Trim() -TypeCombo $srcType -SitePathBox $srcSitePath -EmailBox $srcEmail -LibraryBox $srcLibrary -LibraryExampleLabel $srcLibraryExample -RoleLabel "Source"
     Update-EndpointUiState -TenantBox $txtTenant -TypeCombo $srcType -SitePathBox $srcSitePath -EmailBox $srcEmail -LibraryBox $srcLibrary -SubPathBox $srcSubPath -SiteExampleLabel $srcSiteExample -LibraryExampleLabel $srcLibraryExample -SubfolderExampleLabel $srcSubExample
 })
 
 $dstType.Add_SelectedIndexChanged({
     Update-TypeUi -TypeCombo $dstType -SitePathBox $dstSitePath -EmailBox $dstEmail -LibraryBox $dstLibrary
+    Refresh-LibrariesForEndpoint -Tenant $txtTenant.Text.Trim() -TypeCombo $dstType -SitePathBox $dstSitePath -EmailBox $dstEmail -LibraryBox $dstLibrary -LibraryExampleLabel $dstLibraryExample -RoleLabel "Destination"
     Update-EndpointUiState -TenantBox $txtTenant -TypeCombo $dstType -SitePathBox $dstSitePath -EmailBox $dstEmail -LibraryBox $dstLibrary -SubPathBox $dstSubPath -SiteExampleLabel $dstSiteExample -LibraryExampleLabel $dstLibraryExample -SubfolderExampleLabel $dstSubExample
 })
 
